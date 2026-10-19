@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { DEFAULT_OPTIONS, normalizeOptions, lookAngles, movementSpeed, togglePosture, verticalStep, timeAdvances } from './controls.js';
 import { translate, seasonKeys } from './i18n.js';
-import './style.css';
 
 const $ = s => document.querySelector(s);
 let options = { ...DEFAULT_OPTIONS };
@@ -20,7 +19,7 @@ app.innerHTML = `
 <section id="title-screen" class="title-screen" aria-label="Free Camper">
   <div class="title-content"><div class="brand">FREE CAMPER <span>— 01</span></div>
     <div class="eyebrow">A LITTLE CLOSER TO THE QUIET</div><h1 data-i18n="title"></h1>
-    <p data-i18n="titleNote"></p><nav class="title-nav"><button id="start" class="primary" data-i18n="start"></button><button id="title-options" data-i18n="options"></button></nav>
+    <p data-i18n="titleNote"></p><nav class="title-nav"><button id="start" class="primary" data-i18n="start">${t('start')}</button><button id="title-options" data-i18n="options">${t('options')}</button></nav>
   </div><div class="title-footer"><span data-i18n="menuFooter"></span><span>TAKE YOUR TIME. STAY A WHILE.</span></div>
 </section>
 <div id="home" class="overlay hidden"><main class="home">

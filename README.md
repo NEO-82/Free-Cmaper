@@ -2,6 +2,12 @@
 
 작은 사계절 캠핑 월드를 탐험하는 한국어 브라우저 게임의 첫 프로토타입입니다.
 
+## 설치 없이 로컬에서 테스트
+
+[테스트 ZIP 다운로드](https://github.com/NEO-82/Free-Cmaper/raw/refs/heads/main/downloads/Free-Camper-Test.zip) → 압축 풀기 → `Free-Camper.html`을 Chrome 또는 Edge로 열기 → **게임 시작**. 별도의 웹 배포는 하지 않습니다.
+
+`npm run build:offline`으로 생성한 `dist-offline/Free-Camper.html`을 Chrome 또는 Edge로 여세요. 이 파일에는 게임 코드와 스타일이 모두 들어 있어 설치, 서버, 인터넷 연결이 필요 없습니다. **게임 시작**을 누르면 플레이할 수 있습니다. WebGL 2와 JavaScript는 지원되어야 합니다. 이 단일 파일 버전은 소스의 `index.html`을 직접 여는 것과 다릅니다.
+
 ## 실행
 
 Node.js 22.12 이상이 필요합니다. 현재 환경에서는 Node.js 24로 검증했습니다.
@@ -9,8 +15,14 @@ Node.js 22.12 이상이 필요합니다. 현재 환경에서는 Node.js 24로 �
 ```sh
 cd /workspace/Free-Cmaper
 npm ci --cache /workspace/.npm-cache
-npm run dev
+npm start
 ```
+
+`npm start`는 본인 컴퓨터에서만 접근 가능한 로컬 서버를 실행하고 브라우저를 엽니다. 첫 화면의 **게임 시작** 버튼을 누르면 준비 화면으로 이동합니다. 터미널은 플레이하는 동안 열어 두세요. 클라우드 내부 개발 서버에는 기존 `npm run dev`를 사용합니다.
+
+GitHub의 Actions 화면은 게임 플레이 화면이 아닙니다. 비공개 개발 방침에 따라 공개 배포 워크플로는 제거했으므로 해당 실행 버튼이 없는 것은 정상입니다. HTML 파일을 직접 더블클릭하지 말고 로컬 서버로 실행하세요.
+
+게임 모듈을 불러오지 못하거나 WebGL 2 그래픽 초기화가 실패하면 시작 안내와 오류 내용을 표시합니다. 그래픽 오류라면 Chrome/Edge의 그래픽 가속을 켜고 브라우저를 다시 시작하세요. JavaScript가 꺼져 있을 때도 별도 안내가 표시됩니다.
 
 배포용 빌드: `npm run build`. 개발 서버 기본 포트는 5173입니다.
 
@@ -47,8 +59,8 @@ npm run dev
 - 시스템 Chromium에서 Playwright로 첫 메뉴, 옵션 저장 후 새로고침, 한국어/영어 전환, 장비 준비 조건, 도보 도착 시각, WASD 이동, C/V 자세 전환, 점프·착지, 백팩 6종 표시, 백팩 중 시간·이동 정지와 닫기 후 재개, 기존 수동 정지 유지, 캠핑·정리·휴식, 모바일 백팩 표시, 귀가를 확인했습니다. 런타임 오류는 없었습니다.
 - 전체 일주일 실시간 플레이와 모든 무작위 사건 조합은 검증하지 않았습니다.
 
-## 비공개 개발
+## 소스 공개, 게임 미배포
 
-현재 프로젝트는 비공개 개발만 진행합니다. 공개 웹 배포와 GitHub Pages 자동 배포 워크플로는 제거했습니다. 외부 호스팅 업로드, 공개 테스트 링크 생성, GitHub Pages 재활성화는 사용자가 별도로 요청할 때만 진행하세요.
+소스 저장소 공개는 허용하지만 게임 웹 배포는 진행하지 않습니다. GitHub Pages 자동 배포 워크플로는 제거된 상태로 유지합니다. Pages 활성화, 외부 호스팅 업로드, 공개 플레이 주소 생성은 사용자가 별도로 배포를 요청할 때만 진행하세요. 로컬 실행과 단일 HTML 테스트 파일 생성은 가능합니다.
 
-저장소의 비공개 여부는 GitHub Settings → General → Danger Zone → Change repository visibility에서 확인해야 합니다. 저장소를 비공개로 바꾸는 것과 이미 게시된 Pages 사이트를 내리는 것은 별개입니다. Pages를 활성화했다면 Settings → Pages에서 사이트 게시를 취소하고, 실행 중이거나 대기 중인 배포 작업도 중단해야 합니다.
+GitHub 저장소 공개 범위는 Settings → General → Danger Zone → Change repository visibility에서 관리합니다. 저장소 공개와 게임 웹 배포는 별개입니다.

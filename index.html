@@ -1,1 +1,47 @@
-<!doctype html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Free Camper · 잠시, 숲으로</title></head><body><div id="app"></div><script type="module" src="/src/main.js"></script></body></html>
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Free Camper · 잠시, 숲으로</title>
+  <style>
+    #startup{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:#102e2e;color:#f4f4e9;font:15px/1.8 system-ui,sans-serif;padding:24px;overflow:auto}
+    #startup[hidden]{display:none}#startup section{max-width:540px;width:100%;padding:28px;border:1px solid #d9bd7e55;border-radius:18px;background:#193a32}
+    #startup h1{font-size:28px;margin:14px 0;letter-spacing:-1px}#startup .brand{font-size:11px;letter-spacing:4px;color:#e8bd79}
+    #startup p{color:#d1dccf}#startup code{color:#f1d69c}#startup button{background:#e8bd79;color:#193a32;border:0;border-radius:8px;padding:12px 20px;cursor:pointer;font:inherit}
+    #startup details{margin:18px 0;color:#c7d2c5}#startup pre{white-space:pre-wrap;word-break:break-word;font-size:12px}
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="startup" role="status" aria-live="polite"><section>
+    <div class="brand">FREE CAMPER</div><h1 id="startup-title">숲으로 가는 길을 준비하고 있어요.</h1>
+    <p id="startup-message">게임을 불러오는 중입니다. 잠시 기다려 주세요.</p>
+    <p id="startup-help">처음 실행한다면 프로젝트 폴더에서 <code>npm ci</code> 후 <code>npm start</code>를 실행하세요. 브라우저가 열리면 <strong>게임 시작</strong>을 누르세요.</p>
+    <details id="startup-details" hidden><summary>오류 내용 / Error details</summary><pre id="startup-error"></pre></details>
+    <button id="startup-retry" type="button" hidden>다시 시도 / Retry</button>
+    <noscript><p>게임을 실행하려면 브라우저에서 JavaScript를 허용해 주세요.</p></noscript>
+  </section></div>
+  <script>
+    window.showStartupFailure = function(error) {
+      document.getElementById('app').hidden = true;
+      const box = document.getElementById('startup');
+      box.hidden = false; box.setAttribute('role', 'alert');
+      const isFile = location.protocol === 'file:';
+      const graphics = /WebGL|graphics|GPU|context/i.test(error && error.message || '');
+      document.getElementById('startup-title').textContent = '게임을 시작하지 못했어요.';
+      document.getElementById('startup-message').textContent = isFile
+        ? 'HTML 파일을 직접 열면 게임을 실행할 수 없습니다. 아래 명령으로 실행해 주세요.'
+        : graphics
+          ? '브라우저에서 3D 그래픽(WebGL 2)을 시작할 수 없습니다. Chrome 또는 Edge의 그래픽 가속을 켜고 브라우저를 다시 시작해 주세요.'
+          : '게임 파일을 불러오지 못했습니다. 실행 중인 로컬 서버를 확인하고 새로고침해 주세요.';
+      document.getElementById('startup-error').textContent = error && error.message || String(error);
+      document.getElementById('startup-details').hidden = false;
+      document.getElementById('startup-retry').hidden = false;
+    };
+    document.getElementById('startup-retry').onclick = function() { location.reload(); };
+    if (location.protocol === 'file:') window.showStartupFailure(new Error('Local server required: npm ci, then npm start'));
+  </script>
+  <script type="module" src="/src/boot.js" onerror="window.showStartupFailure(new Error('Game module failed to load. Run npm ci, then npm start.'))"></script>
+</body>
+</html>
