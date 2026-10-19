@@ -47,8 +47,8 @@ npm run dev
 - 시스템 Chromium에서 Playwright로 첫 메뉴, 옵션 저장 후 새로고침, 한국어/영어 전환, 장비 준비 조건, 도보 도착 시각, WASD 이동, C/V 자세 전환, 점프·착지, 백팩 6종 표시, 백팩 중 시간·이동 정지와 닫기 후 재개, 기존 수동 정지 유지, 캠핑·정리·휴식, 모바일 백팩 표시, 귀가를 확인했습니다. 런타임 오류는 없었습니다.
 - 전체 일주일 실시간 플레이와 모든 무작위 사건 조합은 검증하지 않았습니다.
 
-## 웹 배포
+## 비공개 개발
 
-GitHub Pages용 워크플로는 `.github/workflows/pages.yml`에 있습니다. 저장소의 **Settings → Pages → Build and deployment → Source → GitHub Actions**를 선택한 뒤, `main`에 푸시하거나 Actions에서 `Deploy game to GitHub Pages`를 실행하세요. 테스트와 빌드가 통과하면 배포합니다. 실제 접속 주소는 성공한 배포 작업의 `github-pages` 환경에서 확인하세요.
+현재 프로젝트는 비공개 개발만 진행합니다. 공개 웹 배포와 GitHub Pages 자동 배포 워크플로는 제거했습니다. 외부 호스팅 업로드, 공개 테스트 링크 생성, GitHub Pages 재활성화는 사용자가 별도로 요청할 때만 진행하세요.
 
-`dist/`는 정적 호스팅에 그대로 업로드할 수 있습니다. 상대 경로 에셋을 사용하므로 루트 또는 저장소 하위 경로에서 실행할 수 있습니다. 브라우저의 마우스 고정 기능을 위해 HTTPS 호스팅을 사용하세요.
+저장소의 비공개 여부는 GitHub Settings → General → Danger Zone → Change repository visibility에서 확인해야 합니다. 저장소를 비공개로 바꾸는 것과 이미 게시된 Pages 사이트를 내리는 것은 별개입니다. Pages를 활성화했다면 Settings → Pages에서 사이트 게시를 취소하고, 실행 중이거나 대기 중인 배포 작업도 중단해야 합니다.
