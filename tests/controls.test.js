@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_OPTIONS, normalizeOptions, lookAngles, movementSpeed, togglePosture, verticalStep, timeAdvances } from '../src/controls.js';
+import { DEFAULT_OPTIONS, normalizeOptions, lookAngles, movementSpeed, togglePosture, verticalStep, timeAdvances, canJump } from '../src/controls.js';
 import { translate } from '../src/i18n.js';
 
 test('options accept saved values and constrain corrupt or out-of-range settings', () => {
@@ -63,4 +63,11 @@ test('saved audio levels are clamped and mute requires a boolean', () => {
   const value=normalizeOptions({musicVolume:4,sfxVolume:-1,muted:true});
   assert.equal(value.musicVolume,1);assert.equal(value.sfxVolume,0);assert.equal(value.muted,true);
   assert.equal(normalizeOptions({muted:'true'}).muted,false);
+});
+
+
+test('tent entry disables jumping while outdoor and shop jumping remain available', () => {
+  assert.equal(canJump({cameraMode:'tent'}),false);
+  assert.equal(canJump({cameraMode:'outdoor'}),true);assert.equal(canJump({cameraMode:'shop'}),true);
+  assert.equal(canJump({cameraMode:'outdoor',resting:true}),false);assert.equal(canJump({cameraMode:'outdoor',water:true}),false);
 });

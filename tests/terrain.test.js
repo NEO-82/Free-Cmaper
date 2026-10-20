@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WORLD, SCENERY, SHOP, SUMMIT, LAKE, terrainHeight, isWater, canOccupy, trailPoint, resolveMovement } from '../src/terrain.js';
+import { WORLD, SCENERY, SHOP, SUMMIT, LAKE, terrainHeight, isWater, canOccupy, trailPoint, resolveMovement, terrainSlope, terrainWalkable } from '../src/terrain.js';
 
 const close = (actual, expected, tolerance = 1e-6) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} should be close to ${expected}`);
 
 test('expanded map has three times the previous area and keeps the eastern sea', () => {
   const area = (WORLD.maxX - WORLD.minX) * (WORLD.maxZ - WORLD.minZ);
-  assert.ok(Math.abs(area / (1000 * 800) - 3) < .01);
+  assert.ok(Math.abs(area / (1740 * 1380) - 3) < .01);
   assert.ok((WORLD.maxX - WORLD.landMaxX) / (WORLD.maxX - WORLD.minX) > 0.3);
   assert.equal(isWater(WORLD.landMaxX + 15, 0), true);
   assert.equal(isWater(SHOP.x, SHOP.z), false);
@@ -14,7 +14,7 @@ test('expanded map has three times the previous area and keeps the eastern sea',
 
 test('mountain summit provides a genuinely flat campsite and shop grounds are level', () => {
   const height = terrainHeight(SUMMIT.x, SUMMIT.z);
-  assert.ok(height >= 80 && height <= 95);
+  assert.ok(height === 88 * 2);
   for (const [dx, dz] of [[0, 0], [12, 0], [-12, 0], [0, 12], [0, -12], [8, 8]]) {
     close(terrainHeight(SUMMIT.x + dx, SUMMIT.z + dz), height);
     assert.equal(isWater(SUMMIT.x + dx, SUMMIT.z + dz), false);
@@ -46,9 +46,9 @@ test('hiking trail reaches the summit with intermediate points on traversable gr
 });
 
 test('free mountain movement does not force hikers onto the marked trail', () => {
-  const start = { x: -220, z: -100 };
-  const next = resolveMovement(start, { x: 6, z: -6 });
-  close(next.x, -214); close(next.z, -106);
+  const start = { x: -300, z: -300 };
+  const next = resolveMovement(start, { x: 3, z: 0 });
+  close(next.x, -297); close(next.z, -300);
   assert.ok(terrainHeight(next.x, next.z) > terrainHeight(SHOP.x, SHOP.z));
 });
 
@@ -79,7 +79,7 @@ test('building boxes block passage but allow movement along the wall', () => {
 });
 
 test('world borders and water cannot be crossed by very large movement steps', () => {
-  const edge = resolveMovement({ x: -340, z: -100 }, { x: -1000, z: 0 }, [], 0.55);
+  const edge = resolveMovement({ x: WORLD.minX + 10, z: 0 }, { x: -100, z: 0 }, [], 0.55);
   assert.ok(edge.x >= WORLD.minX + 0.55 - 1e-5);
   const ocean = resolveMovement({ x: 90, z: 0 }, { x: 500, z: 0 }, [], 0.55);
   assert.equal(isWater(ocean.x, ocean.z), false);
@@ -119,4 +119,21 @@ test('swimmers cross the beach and sea while camps and animals still require dry
 test('dry inland valleys below sea level remain walkable land', () => {
   const p={x:-687,z:-460};
   assert.ok(terrainHeight(p.x,p.z)<-.3);assert.equal(isWater(p.x,p.z),false);assert.equal(canOccupy(p.x,p.z),true);
+});
+
+
+test('switchback trail is actually traversable all the way to the doubled summit', () => {
+  let previous=trailPoint(0);
+  for(let i=1;i<=280;i++){
+    const next=trailPoint(i/280),moved=resolveMovement(previous,{x:next.x-previous.x,z:next.z-previous.z});
+    close(moved.x,next.x,.03);close(moved.z,next.z,.03);previous=next;
+  }
+  close(terrainHeight(previous.x,previous.z),176);
+});
+
+test('rock faces stop both ordinary steps and sprint-sized movement without blocking gentler slopes', () => {
+  assert.ok(terrainSlope(-300,-200)>2);assert.equal(terrainWalkable(-300,-200),false);
+  assert.equal(canOccupy(-315,-200),true);
+  for(const distance of [30,120]){const end=resolveMovement({x:-315,z:-200},{x:distance,z:0});assert.ok(end.x<-303&&end.x>-315);}
+  const free=resolveMovement({x:-300,z:-300},{x:3,z:0});close(free.x,-297);
 });

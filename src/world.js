@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import { createGroundCover } from './groundcover.js';
 import * as geography from './terrain.js';
-const { WORLD, SHOP, SUMMIT, LAKE, terrainHeight, isWater, riverX, trailPoint } = geography;
+const { WORLD, SHOP, SUMMIT, LAKE, terrainHeight, isWater, riverX, trailPoint, trailSurfaceAt, terrainSlope } = geography;
 
 function generator(seed = 82021) { return () => { seed = seed * 16807 % 2147483647; return (seed - 1) / 2147483646; }; }
 function paintedTexture(kind, random) {
@@ -92,10 +93,14 @@ export function createWorld(scene) {
   const barkMap = paintedTexture('bark', random), stoneMap = paintedTexture('stone', random), groundMap = paintedTexture('ground', random);
   groundMap.repeat.set(width / 12, depth / 12); barkMap.repeat.set(1, 2);
   const groundMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, map: groundMap });
-  const terrain = new THREE.PlaneGeometry(width, depth, Math.ceil(width / 3.7), Math.ceil(depth / 3.7)); terrain.rotateX(-Math.PI / 2);
-  terrain.translate((WORLD.minX + WORLD.maxX) / 2, 0, (WORLD.minZ + WORLD.maxZ) / 2);
-  const vertices = terrain.attributes.position, colors = new Float32Array(vertices.count * 3);
-  for (let i = 0; i < vertices.count; i++) vertices.setY(i, terrainHeight(vertices.getX(i), vertices.getZ(i)));
+  // Concentrate samples on the detailed central mountain; distant land uses a coarse grid.
+  function axis(min,max,fineMin,fineMax){ const values=[min];let x=min;while(x<max){x=Math.min(max,x+(x>=fineMin&&x<fineMax?2.5:12));values.push(x);}return values; }
+  const xs=axis(WORLD.minX,WORLD.maxX,-480,110), zs=axis(WORLD.minZ,WORLD.maxZ,-480,50);
+  const terrain = new THREE.PlaneGeometry(width,depth,xs.length-1,zs.length-1);terrain.rotateX(-Math.PI/2);
+  const vertices=terrain.attributes.position,uvs=terrain.attributes.uv,colors=new Float32Array(vertices.count*3);
+  for(let i=0;i<vertices.count;i++){
+    const x=xs[i%xs.length],z=zs[Math.floor(i/xs.length)];vertices.setXYZ(i,x,terrainHeight(x,z),z);uvs.setXY(i,(x-WORLD.minX)/width,(WORLD.maxZ-z)/depth);
+  }
   terrain.setAttribute('color', new THREE.BufferAttribute(colors, 3)); terrain.computeVertexNormals();
   mesh(group, terrain, groundMaterial, 0, 0, 0).castShadow = false;
   const foliageMaterials = [0, 1, 2].map(() => new THREE.MeshStandardMaterial({ color: '#71c746', vertexColors: true, roughness: .88 }));
@@ -127,7 +132,7 @@ export function createWorld(scene) {
   ribbon(trailSamples, 3.8, trailMaterial, group);
   const shopTrail = Array.from({ length: 110 }, (_, i) => ({ x: SHOP.x + Math.sin(i / 24) * 3, z: -12 + i / 109 * (WORLD.maxZ + 11) }));
   ribbon(shopTrail, 4.2, trailMaterial, group);
-  function nearTrail(x, z) { return trailSamples.some((p, i) => i % 3 === 0 && Math.hypot(x - p.x, z - p.z) < 4.6); }
+  function nearTrail(x, z) { return trailSurfaceAt(x,z).distance < 4.6; }
   const cliffSites = [{ x: -58, z: -37, r: 6.2 }, { x: -72, z: -45, r: 8.2 }, { x: -64, z: -59, r: 5.4 }];
   function reserved(x, z) {
     return isWater(x, z) || cliffSites.some(p => Math.hypot(x - p.x, z - p.z) < p.r + 3) || x > coastStart - 4 || (x > SHOP.x - 19 && x < SHOP.x + 19 && z > SHOP.z - 19 && z < SHOP.z + 17) || Math.hypot(x - SUMMIT.x, z - SUMMIT.z) < SUMMIT.radius + 5 || nearTrail(x, z) || Math.hypot(x - SHOP.x, z + 12) < 8;
@@ -135,15 +140,15 @@ export function createWorld(scene) {
   const trunkGeo = coloredGeometry(new THREE.CylinderGeometry(.62, 1, 1, 10, 3), '#ab8140', '#ffdc90');
   const branchGeo = new THREE.CylinderGeometry(.13, .25, 1, 6);
   const leafGeo = canopyGeometry(), pineGeo = canopyGeometry(true);
-  const TREE_COUNT = 1800, LEAF_LAYERS = 6, BRANCHES = 5;
+  const TREE_COUNT = 3600, LEAF_LAYERS = 6, BRANCHES = 5;
   const specifications = [{ x: -23, z: -8, radius: .72, h: 10.5, species: 1 }];
   // A readable, lush foreground around the trailhead, and equally dense new land.
   let attempts = 0;
   while (specifications.length < TREE_COUNT && attempts++ < 40000) {
-    const local = specifications.length < 95;
-    const x = local ? SHOP.x - 85 + random() * 170 : WORLD.minX + 15 + random() * (landWidth - 30);
-    const z = local ? SHOP.z - 90 + random() * 180 : WORLD.minZ + 14 + random() * (depth - 28);
-    if (reserved(x, z) || specifications.some(t => Math.hypot(t.x - x, t.z - z) < 5.6)) continue;
+    const local = specifications.length < 120, mountain = !local && specifications.length < 350;
+    const x = local ? SHOP.x - 85 + random() * 170 : mountain ? SUMMIT.x-175+random()*350 : WORLD.minX + 15 + random() * (landWidth - 30);
+    const z = local ? SHOP.z - 90 + random() * 180 : mountain ? SUMMIT.z-175+random()*350 : WORLD.minZ + 14 + random() * (depth - 28);
+    if (reserved(x, z) || terrainSlope(x,z)>1.1 || specifications.some(t => Math.hypot(t.x - x, t.z - z) < 5.6)) continue;
     const h = 7.5 + random() * 8;
     specifications.push({ x, z, radius: .42 + h * .028, h, species: terrainHeight(x, z) > 62 && random() < .7 ? 0 : random() < .16 ? 0 : random() < .6 ? 1 : 2 });
   }
@@ -203,7 +208,7 @@ export function createWorld(scene) {
   }
   const rockPositions = [{ x: -39, z: -10, r: 1.2 }, ...cliffSites];
   let rockAttempts = 0;
-  while (rockPositions.length < 68 && rockAttempts++ < 10000) { const x = WORLD.minX + 20 + random() * (landWidth - 45), z = WORLD.minZ + 20 + random() * (depth - 40); if (!reserved(x, z) && !trees.some(t => Math.hypot(t.x - x, t.z - z) < 4)) rockPositions.push({ x, z, r: 1.4 + random() * 3.3 }); }
+  while (rockPositions.length < 220 && rockAttempts++ < 10000) { const mountain=rockPositions.length<100;const x = mountain ? SUMMIT.x-180+random()*360 : WORLD.minX + 20 + random() * (landWidth - 45), z = mountain ? SUMMIT.z-180+random()*360 : WORLD.minZ + 20 + random() * (depth - 40); if (!reserved(x, z) && !trees.some(t => Math.hypot(t.x - x, t.z - z) < 4)) rockPositions.push({ x, z, r: 1.4 + random() * 3.3 }); }
   const rockGeo = boulderGeometry(), mossGeo = coloredGeometry(new THREE.IcosahedronGeometry(.85, 1), '#55a72d', '#c7e960');
   for (const p of rockPositions) {
     const y = terrainHeight(p.x, p.z), r = p.r;
@@ -215,14 +220,13 @@ export function createWorld(scene) {
   // A single draw call for thousands of sculpted tufts; local clusters make
   // the ground richly planted at actual walking scale, not only in a map view.
   const grassMaterial = new THREE.MeshStandardMaterial({ color: '#87d94b', vertexColors: true, roughness: .95, side: THREE.DoubleSide });
-  const grass = new THREE.InstancedMesh(tuftGeometry(), grassMaterial, 8500); let grassCount = 0;
-  for (let i = 0; i < 15000 && grassCount < 8500; i++) {
-    const local = grassCount < 2600;
-    const x = local ? SHOP.x - 75 + random() * 150 : WORLD.minX + 12 + random() * (landWidth - 24), z = local ? SHOP.z - 65 + random() * 140 : WORLD.minZ + 12 + random() * (depth - 24);
-    if (isWater(x, z) || x > coastStart || (x > SHOP.x - 11 && x < SHOP.x + 11 && z > SHOP.z - 10 && z < SHOP.z + 10) || Math.hypot(x - SUMMIT.x, z - SUMMIT.z) < SUMMIT.radius || nearTrail(x, z)) continue;
-    dummy.position.set(x, terrainHeight(x, z) + .02, z); dummy.rotation.set(0, random() * Math.PI * 2, 0); const s = .65 + random() * .9; dummy.scale.set(s, s, s); dummy.updateMatrix(); grass.setMatrixAt(grassCount++, dummy.matrix);
-  }
-  grass.count = grassCount; grass.instanceMatrix.needsUpdate = true; grass.computeBoundingSphere(); group.add(grass);
+  const groundCover=createGroundCover(group,{geometry:tuftGeometry(),material:grassMaterial,heightAt:terrainHeight,allowed:(x,z)=>{
+    if(x<WORLD.minX||x>coastStart-2||z<WORLD.minZ||z>WORLD.maxZ||isWater(x,z)||nearTrail(x,z))return false;
+    if(x>SHOP.x-11&&x<SHOP.x+11&&z>SHOP.z-10&&z<SHOP.z+14)return false;
+    if(z>-12&&Math.abs(x-SHOP.x)<5)return false;
+    return terrainSlope(x,z)<1.1;
+  }});
+  groundCover.update(SHOP);
   const fernMaterial = new THREE.MeshStandardMaterial({ color: '#8de14c', vertexColors: true, roughness: .92, side: THREE.DoubleSide });
   const ferns = new THREE.InstancedMesh(tuftGeometry(true), fernMaterial, 780); let fernCount = 0;
   for (let i = 0; i < 1700 && fernCount < 780; i++) {
@@ -288,5 +292,5 @@ export function createWorld(scene) {
     shoreLines.forEach((line, i) => { line.position.x = Math.sin(time * .5 + i * .9) * .7; });
     for (let i = falling.length - 1; i >= 0; i--) { const f = falling[i]; f.time += dt; f.object.rotation.z = Math.min(Math.PI * .48, f.time * f.time * .8) * f.direction; if (f.time > 3.2) { group.remove(f.object); falling.splice(i, 1); } }
   }
-  return { group, terrain, sea, lake, river, trees, rocks, colliders, interactables, updateSeason, animate, chopTree, heightAt: terrainHeight };
+  return { group, terrain, sea, lake, river, trees, rocks, groundCover, updateCover:groundCover.update, colliders, interactables, updateSeason, animate, chopTree, heightAt: terrainHeight };
 }

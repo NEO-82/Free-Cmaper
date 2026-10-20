@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DEFAULT_OPTIONS, normalizeOptions, lookAngles, movementSpeed, togglePosture, verticalStep, timeAdvances } from './controls.js';
+import { DEFAULT_OPTIONS, normalizeOptions, lookAngles, movementSpeed, togglePosture, verticalStep, timeAdvances, canJump } from './controls.js';
 import { translate, seasonKeys } from './i18n.js';
 import { WORLD, SHOP, SUMMIT, LAKE, COAST_START, terrainHeight, isWater, resolveMovement } from './terrain.js';
 import { sampleWeather } from './weather.js';
@@ -8,6 +8,7 @@ import { createMarine } from './marine.js';
 import { createAudio } from './audio.js';
 import { createWorld } from './world.js';
 import { createAtmosphere, weatherTextures } from './atmosphere.js';
+import { poseBedRest, restStep, smoothRest } from './rest.js';
 import { createCamper, poseCamper } from './characters.js';
 import { outdoorCameraPosition } from './camera.js';
 import { createWildlife, animateWildlife } from './wildlife.js';
@@ -28,6 +29,7 @@ const visited = new Set(), keys = new Set();
 let tentConfig = { ...DEFAULT_TENT_CONFIG }, tentDraft = { ...DEFAULT_TENT_CONFIG }, shopOpen = false, cameraMode = 'outdoor', actionAt = -1000, treeCount = 0;
 let contextAction = null, activeTool = null, lastHUD = 0;
 let threatSpawned = false, sceneDirty = true, simulationSeconds = 0;
+let bedRest = null;
 let diveDepth = 0, selectedItem = 0, lastFootstep = 0, pauseChangedAt = -1000;
 let weatherProfile = sampleWeather(season);
 const audio = createAudio();
@@ -246,7 +248,7 @@ function displayPosture(moving = ['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDo
   if (posture !== 'stand') return posture;
   return keys.has('ControlLeft') ? 'sneak' : keys.has('ShiftLeft') && moving ? 'run' : 'stand';
 }
-function setPosture(next) { if (jumpHeight > 0) return; posture = togglePosture(posture, next); poseCamper(camper, posture); renderHUD(); }
+function setPosture(next) { if (bedRest || jumpHeight > 0) return; posture = togglePosture(posture, next); poseCamper(camper, posture); renderHUD(); }
 const gameCodes = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'KeyC', 'KeyV', 'KeyB', 'KeyF', 'KeyQ', 'ControlLeft', 'ControlRight'];
 addEventListener('keydown', e => {
   const modal = optionsOpen ? 'options' : backpackOpen ? 'backpack' : shopOpen ? 'shop' : null;
@@ -275,7 +277,7 @@ addEventListener('keydown', e => {
   if (!e.repeat && e.code === 'KeyF') interact();
   if (!e.repeat && e.code === 'KeyC') setPosture('crouch');
   if (!e.repeat && e.code === 'KeyV') setPosture('prone');
-  if (!e.repeat && e.code === 'Space' && !inWater() && posture === 'stand' && jumpHeight === 0) { jumpVelocity = 7; jumpHeight = 0.001; audio.effect('jump'); renderHUD(); }
+  if (!e.repeat && e.code === 'Space' && canJump({cameraMode,resting:!!bedRest,water:inWater(),posture,height:jumpHeight})) { jumpVelocity = 7; jumpHeight = 0.001; audio.effect('jump'); renderHUD(); }
 });
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', clearMovement);
@@ -318,10 +320,12 @@ function currentFloor(x = player.position.x, z = player.position.z) {
 function updateInterior() {
   cameraMode = camp?.isInside(player.position.x, player.position.z) ? 'tent' : shopBuilding.isInside(player.position.x, player.position.z) ? 'shop' : 'outdoor';
   shopBuilding.setInterior(cameraMode === 'shop'); camp?.setInterior(cameraMode === 'tent');
-  if (camp) { camp.shell.visible = !(backpackOpen && cameraMode === 'tent'); camp.doorPivot.visible = camp.shell.visible; }
+  if (camp) { camp.shell.visible = true; camp.doorPivot.visible = true; }
+  if (cameraMode === 'tent') jumpHeight = jumpVelocity = 0;
   player.visible = cameraMode !== 'tent' && !(inWater() && diveDepth > 1.1);
 }
 function updateContext() {
+  if (bedRest) { contextAction={kind:'getUp',label:'getUp'};$('#interaction-label').textContent=t('getUp');return; }
   const candidates = [];
   const add = (kind, point, range, label, object = null, priority = 0) => {
     const d = flatDistance(point);
@@ -333,7 +337,7 @@ function updateContext() {
     for (const item of shopBuilding.interiorTargets ?? []) add('shelf', item.position, 2.8, 'inspectShelf', item);
   } else if (cameraMode === 'tent') {
     add('tentDoor', camp.doorPosition, 3.5, camp.doorOpen ? 'closeTent' : 'openTent', camp, -1);
-    for (const item of camp.interiorTargets) add(item.id === 'tent-bedding' ? 'bedding' : item.id === 'tent-backpack' ? 'backpack' : 'lantern', item.position, 3.5, item.id === 'tent-bedding' ? 'tentRest' : item.id === 'tent-backpack' ? 'openBackpack' : 'toggleLantern', item);
+    for (const item of camp.interiorTargets) { const bed=item.id.startsWith('tent-bedding');add(bed ? 'bedding' : item.id === 'tent-backpack' ? 'backpack' : 'lantern', item.position, bed?2.4:2.7, bed?'lieInBed':item.id === 'tent-backpack'?'openBackpack':'toggleLantern', item, bed?-.7:0); }
   } else {
     if (camp) add('tentDoor', camp.doorPosition, 3.5, camp.doorOpen ? 'closeTent' : 'openTent', camp, -0.7);
     for (const tree of world.trees) if (!tree.felled) add('tree', tree, tree.radius + 2.6, 'chopTree', tree);
@@ -352,11 +356,29 @@ function updateContext() {
   $('#interaction-label').textContent = t(contextAction.label) + (contextAction.kind === 'tree' ? ` (${contextAction.object.hits}/3)` : '');
 }
 function addInventory(id, count = 1) { if (count > 0) audio.effect('collect'); inventory.set(id, (inventory.get(id) ?? 0) + count); }
+function toggleBedRest(bed) {
+  if (bedRest) { bedRest.target=0; audio.effect('close'); return; }
+  if (!camp || cameraMode!=='tent' || !bed?.restPosition) return;
+  clearMovement();jumpHeight=jumpVelocity=0;posture='stand';
+  bedRest={bed,progress:0,target:1,start:player.position.clone(),rotation:player.rotation.y,yaw,pitch,cameraStart:camera.position.clone(),viewStart:camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(5).add(camera.position)};
+  audio.effect('open');toast('bedRestStarted');renderHUD();
+}
+function advanceBedRest(dt) {
+  if (!bedRest) return;
+  const state=bedRest;state.progress=restStep(state.progress,state.target,dt);
+  player.position.lerpVectors(state.start,state.bed.restPosition,smoothRest(state.progress));player.rotation.y=camp.group.rotation.y;
+  poseBedRest(camper,state.progress,elapsed);
+  if (state.progress===0 && state.target===0) {
+    player.position.copy(state.start);player.rotation.y=state.rotation;yaw=state.yaw;pitch=state.pitch;bedRest=null;
+    camper.backpack.visible=true;poseCamper(camper,'stand');toast('gotUp');renderHUD();
+  }
+}
 function interact() {
   if (!advancing()) return;
   updateContext(); const action = contextAction;
   if (performance.now() - actionAt < 400) return;
   actionAt = performance.now();
+  if (action.kind === 'getUp') { toggleBedRest();return; }
   if (action.kind === 'shopDoor' || action.kind === 'tentDoor') {
     const structure = action.object;
     if (structure.doorOpen && flatDistance(structure.doorPosition ?? action.point) < 1.4) { toast('clearDoor'); return; }
@@ -381,7 +403,7 @@ function interact() {
   } else if (action.kind === 'water') { audio.effect('splash'); addInventory('water'); toast('waterCollected');
   } else if (action.kind === 'backpack') { openModal('backpack');
   } else if (action.kind === 'lantern') { camp.group.traverse(object => { if (object.isPointLight) { object.userData.originalIntensity ??= object.intensity; object.intensity = object.intensity ? 0 : object.userData.originalIntensity; } }); toast('lanternToggled');
-  } else if (action.kind === 'bedding') { $('#sleep').click();
+  } else if (action.kind === 'bedding') { toggleBedRest(action.object);
   } else if (action.kind === 'shelf') { toast('shelfHint');
   } else if (action.kind === 'animal') { toast('animalObserved');
   } else if (action.kind === 'marine') { audio.effect('item'); toast('marineObserved');
@@ -452,7 +474,7 @@ function renderHUD() {
   $('#clock').textContent = `DAY ${Math.floor(elapsed / 2880) + 1} / 7 · ${String(Math.floor(hour())).padStart(2, '0')}:${String(Math.floor(hour() % 1 * 60)).padStart(2, '0')}`;
   $('#weather').textContent = `${t(seasonKeys[season])} · ${t(weather)} · ${t(night() ? 'night' : 'day')}`;
   $('#balance').textContent = `₩ ${money.toLocaleString()}`;
-  const state = inWater() ? (diveDepth > 1.1 ? 'underwater' : 'swimming') : jumpHeight > 0 ? 'airborne' : posture === 'crouch' ? 'crouched' : posture === 'prone' ? 'proneState' : displayPosture() === 'sneak' ? 'sneaking' : displayPosture() === 'run' ? 'runningState' : 'stand';
+  const state = inWater() ? (diveDepth > 1.1 ? 'underwater' : 'swimming') : bedRest ? (bedRest.target===0?'gettingUp':bedRest.progress===1?'lyingBack':'lyingDown') : jumpHeight > 0 ? 'airborne' : posture === 'crouch' ? 'crouched' : posture === 'prone' ? 'proneState' : displayPosture() === 'sneak' ? 'sneaking' : displayPosture() === 'run' ? 'runningState' : 'stand';
   $('#status').textContent = `${t(danger ? 'danger' : 'safe')} · ${t(state)} · ${t(cameraMode === 'tent' ? 'firstPerson' : cameraMode === 'shop' ? 'shoulderView' : 'outdoorView')}`;
   $('#missions').innerHTML = `${camp ? '✓' : '○'} ${t('campGoal')}<br>${treeCount ? '✓' : '○'} ${t('treeGoal')}<br>${visited.has('summit') ? '✓' : '○'} ${t('summitGoal')}`;
   $('#journal').textContent = t(season === 3 && !inventory.has('winterBag') ? 'winterTip' : weather === 'rain' && !inventory.has('tarp') ? 'rainTip' : 'peacefulTip');
@@ -481,6 +503,7 @@ function stepGame(dt, now, realSeconds) {
   if (dir.length()) { target = null; dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw); }
   else if (target) { dir.copy(target).sub(player.position); dir.y = 0; if (dir.length() < 0.7) { target = null; dir.set(0, 0, 0); } else dir.normalize(); }
   const creep = keys.has('ControlLeft'), sprint = keys.has('ShiftLeft');
+  if (bedRest) dir.set(0,0,0);
   const speed = inWater() ? 1.7 * (creep ? .4 : sprint ? 3 : 1) : movementSpeed(cameraMode === 'outdoor' ? mode : 'walk', posture, sprint, creep);
   const before = { x: player.position.x, z: player.position.z };
   const moved = resolveMovement(before, { x: dir.x * speed * dt, z: dir.z * speed * dt }, allColliders(), .55, { allowWater: true });
@@ -495,8 +518,8 @@ function stepGame(dt, now, realSeconds) {
   if (dir.length() && now-lastFootstep > (wet ? 650 : creep ? 760 : sprint ? 240 : 460)) { audio.effect(wet ? 'splash' : 'step'); lastFootstep = now; }
   if (dir.length()) player.rotation.y = Math.atan2(dir.x, dir.z);
   else if (cameraMode !== 'outdoor') player.rotation.y = yaw + Math.PI;
-  poseCamper(camper, inWater() ? 'swim' : displayPosture(dir.length() > 0), dir.length() > 0, now);
-  heldTool.visible = !!activeTool && inventory.has(activeTool);
+  if (bedRest) advanceBedRest(dt);else { camper.backpack.visible=true;poseCamper(camper, inWater() ? 'swim' : displayPosture(dir.length() > 0), dir.length() > 0, now); }
+  heldTool.visible = !bedRest && !!activeTool && inventory.has(activeTool);
   heldTool.rotation.z = now - actionAt < 350 ? Math.sin((now - actionAt) / 350 * Math.PI) * 1.7 : -0.15;
   toolHead.scale.set(activeTool === 'pickaxe' ? 1.8 : 1, activeTool === 'shovel' ? 1.6 : 1, 1);
   visited.add(player.position.z < -110 ? 'mountain' : player.position.z > LAKE.z - 60 ? 'lake' : player.position.x > WORLD.landMaxX - 35 ? 'coast' : 'forest');
@@ -542,13 +565,24 @@ function animate(now) {
   if (!advancing() && !sceneDirty) return;
   sceneDirty = false; updateInterior();
   const daylight = THREE.MathUtils.clamp(Math.sin((hour() - 5) / 14 * Math.PI), 0.10, 1);
-  ambient.intensity = night() ? 0.65 : 1.4 + Math.sqrt(daylight) * 1.8; sun.intensity = daylight * 2.5;
+  ambient.intensity = cameraMode !== 'outdoor' ? (night() ? .65 : 1.0) : night() ? 0.65 : 1.4 + Math.sqrt(daylight) * 1.8; sun.intensity = daylight * 2.5;
   sun.target.position.copy(player.position);
   sun.position.set(player.position.x + Math.cos(hour() / 24 * Math.PI * 2) * 80, player.position.y + Math.max(16, daylight * 110), player.position.z - 45);
   const sky = atmosphere.update(hour(), weather, elapsed, player.position, weatherProfile);
   scene.fog.color.copy(sky.horizon); scene.fog.density = cameraMode !== 'outdoor' ? 0.0003 : weather === 'fog' ? 0.0045 : 0.00038;
   const eye = posture === 'prone' ? 0.6 : posture === 'crouch' ? 1.1 : displayPosture() === 'sneak' ? 1.9 : 2.1;
-  if (cameraMode === 'tent' || (inWater() && diveDepth > 1.1)) {
+  if (bedRest) {
+    const settle=THREE.MathUtils.smoothstep(bedRest.progress,.65,1),bed=bedRest.bed;
+    const side=player.position.clone().add(new THREE.Vector3(bed.id.endsWith('right')?-1.9:1.9,2.8,1.0).applyAxisAngle(new THREE.Vector3(0,1,0),camp.group.rotation.y));
+    const eyePosition=bed.eyePosition.clone();
+    side.lerpVectors(bedRest.cameraStart,side,THREE.MathUtils.smoothstep(bedRest.progress,0,.2));
+    camera.position.lerpVectors(side,eyePosition,settle);
+    const tilt=THREE.MathUtils.clamp(pitch-.32,-.5,.5);
+    const skyTarget=eyePosition.clone().add(new THREE.Vector3(Math.sin(yaw)*Math.sin(tilt)*5,Math.cos(tilt)*5,Math.cos(yaw)*Math.sin(tilt)*5));
+    const torso=player.position.clone().add(new THREE.Vector3(0,.9,-1.2).applyAxisAngle(new THREE.Vector3(0,1,0),camp.group.rotation.y));
+    torso.lerpVectors(bedRest.viewStart,torso,THREE.MathUtils.smoothstep(bedRest.progress,0,.2));
+    camera.lookAt(torso.lerp(skyTarget,settle));player.visible=bedRest.progress>.12&&settle<.78;
+  } else if (cameraMode === 'tent' || (inWater() && diveDepth > 1.1)) {
     camera.position.set(player.position.x, player.position.y + eye, player.position.z);
     camera.lookAt(camera.position.x - Math.sin(yaw) * Math.cos(pitch-.32) * 10, camera.position.y - Math.sin(pitch-.32) * 10, camera.position.z - Math.cos(yaw) * Math.cos(pitch-.32) * 10);
   } else if (cameraMode === 'shop') {
@@ -567,11 +601,15 @@ function animate(now) {
     camera.lookAt(camera.position.x-Math.sin(yaw)*Math.cos(aim)*10,camera.position.y-Math.sin(aim)*10,camera.position.z-Math.cos(yaw)*Math.cos(aim)*10);
   }
   if (backpackOpen) {
-    player.visible = true;
-    const outside = cameraMode === 'outdoor', back = outside ? 12 : 5;
-    camera.position.set(player.position.x+Math.sin(yaw)*back,player.position.y+(outside ? 6 : 9),player.position.z+Math.cos(yaw)*back);
-    camera.lookAt(player.position.x,player.position.y+3.4,player.position.z);
+    player.visible=true;
+    const outside=cameraMode==='outdoor',back=outside?12:2.1,bounds=cameraMode==='shop'?shopBuilding.bounds:camp?.bounds;
+    camera.position.set(player.position.x+Math.sin(yaw)*back,player.position.y+(outside?6:3.1),player.position.z+Math.cos(yaw)*back);
+    if(!outside&&bounds){camera.position.x=THREE.MathUtils.clamp(camera.position.x,bounds.minX+.8,bounds.maxX-.8);camera.position.z=THREE.MathUtils.clamp(camera.position.z,bounds.minZ+.8,bounds.maxZ-.8);}
+    if(cameraMode==='tent')camera.position.y=Math.min(camera.position.y,camp.roofHeightAt(camera.position.x,camera.position.z)-.3);
+    if(bedRest)camera.lookAt(bedRest.bed.eyePosition.clone().add(new THREE.Vector3(0,1.3,0)));
+    else camera.lookAt(player.position.x,player.position.y+(outside?3.4:3.2),player.position.z);
   }
+  world.updateCover(player.position,camp?.bounds);
   const submerged = camera.position.y < -.15 && (isWater(camera.position.x,camera.position.z) || camera.position.x>COAST_START) && terrainHeight(camera.position.x,camera.position.z)<-.25;
   scene.getObjectByName('sky-dome').visible = !submerged;
   scenery.group.visible = !submerged;
@@ -581,7 +619,8 @@ function animate(now) {
   }
   if (backpackOpen) {
     // Anchor the bubble above the actual head; lift the view slightly while inspecting.
-    const head=player.position.clone().add(new THREE.Vector3(0,3.25,0)).project(camera);
+    camera.updateMatrixWorld(true);
+    const head=camper.head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,bedRest ? .55 : cameraMode==='outdoor' ? 1.03 : .75,0)).project(camera);
     const bubble=$('#backpack-modal'), bx=(head.x*.5+.5)*innerWidth, by=(-head.y*.5+.5)*innerHeight;
     bubble.style.left=`${THREE.MathUtils.clamp(bx, Math.min(240,innerWidth/2), innerWidth-Math.min(240,innerWidth/2))}px`;
     bubble.style.top=`${THREE.MathUtils.clamp(by,Math.min(bubble.offsetHeight+24,innerHeight*.7),innerHeight-45)}px`;
@@ -594,10 +633,10 @@ addEventListener('resize', () => { sceneDirty = true;
 syncOptions(); localize(); requestAnimationFrame(animate);
 if (import.meta.env.DEV) {
   window.__camper = {
-    snapshot: () => ({ running, paused, simulationSeconds, pose: displayPosture(), bodyLean: camper.upperBody.rotation.x, backpackOpen, optionsOpen, shopOpen, weather, weatherProfile, atmosphere: atmosphere.getState?.(), audio: audio.getState(), marine: marine.getState(), seaLife: marine.creatures.slice(0,8).map(g=>g.position.toArray()), diveDepth, inWater: inWater(), cameraY: camera.position.y, viewDirection: camera.getWorldDirection(new THREE.Vector3()).toArray(), world: WORLD, scenery: scenery.bounds, cameraMode, elapsed, money, inventory: Object.fromEntries(inventory), player: player.position.toArray(), yaw, pitch, tentConfig: { ...tentConfig }, treeCount, shopDoor: shopBuilding.doorOpen, context: contextAction?.kind, trees: world.trees.map(({ id, x, z, hits, felled }) => ({ id, x, z, hits, felled })), camp: camp ? { position: camp.group.position.toArray(), entrance: camp.entrance.toArray(), inside: camp.insidePosition.toArray(), doorOpen: camp.doorOpen, bounds: camp.bounds } : null }),
+    snapshot: () => ({ running, paused, simulationSeconds, pose: displayPosture(), bodyLean: camper.upperBody.rotation.x, jumpHeight, bedRest:bedRest?{progress:bedRest.progress,target:bedRest.target,bed:bedRest.bed.id}:null, shopRoof:shopBuilding.roof.visible, shopCeiling:shopBuilding.ceiling.visible, indoorLights:shopBuilding.interiorLights.length, groundCover:world.groundCover.getState(), backpackOpen, optionsOpen, shopOpen, weather, weatherProfile, atmosphere: atmosphere.getState?.(), audio: audio.getState(), marine: marine.getState(), seaLife: marine.creatures.slice(0,8).map(g=>g.position.toArray()), diveDepth, inWater: inWater(), cameraY: camera.position.y, viewDirection: camera.getWorldDirection(new THREE.Vector3()).toArray(), world: WORLD, scenery: scenery.bounds, cameraMode, elapsed, money, inventory: Object.fromEntries(inventory), player: player.position.toArray(), yaw, pitch, tentConfig: { ...tentConfig }, treeCount, shopDoor: shopBuilding.doorOpen, context: contextAction?.kind, trees: world.trees.map(({ id, x, z, hits, felled }) => ({ id, x, z, hits, felled })), camp: camp ? { position: camp.group.position.toArray(), entrance: camp.entrance.toArray(), inside: camp.insidePosition.toArray(), doorOpen: camp.doorOpen, bounds: camp.bounds,dimensions:camp.dimensions,beds:camp.interiorTargets.filter(i=>i.id.startsWith('tent-bedding')).map(i=>({id:i.id,position:i.position.toArray(),rest:i.restPosition.toArray(),eye:i.eyePosition.toArray()})) } : null }),
     setWeather(kind,cover=0) { sceneDirty = true; weather=kind;weatherProfile={kind,cloudCover:cover,wind:1,precipitation:kind==='rain'||kind==='snow'?1:0}; },
     setTime(hours) { elapsed=(hours-5+24)%24*120;weatherTick=Math.floor(elapsed/120);renderHUD(); },
     setDanger(value) {danger=value;},
-    teleport(x, z, facing = 0) { if (!Number.isFinite(x) || !Number.isFinite(z)) return; player.position.set(x, terrainHeight(x, z), z); yaw = facing; pitch = .32; jumpHeight = 0; jumpVelocity = 0; clearMovement(); updateInterior(); diveDepth = 0; player.position.y = playerBaseY(); player.rotation.y = yaw + Math.PI; renderHUD(); },
+    teleport(x, z, facing = 0) { if (!Number.isFinite(x) || !Number.isFinite(z)) return; bedRest=null;camper.backpack.visible=true;poseCamper(camper,'stand');player.position.set(x, terrainHeight(x, z), z); yaw = facing; pitch = .32; jumpHeight = 0; jumpVelocity = 0; clearMovement(); updateInterior(); diveDepth = 0; player.position.y = playerBaseY(); player.rotation.y = yaw + Math.PI; renderHUD(); },
   };
 }

@@ -28,6 +28,7 @@ test('tent standard size is half the former width and a person can walk through 
   const scene = new THREE.Scene(), tent = createTent(scene, DEFAULT_TENT, { x: 20, y: 10, z: 30 });
   assert.equal(tent.dimensions.width, 9);
   assert.equal(tent.dimensions.depth, 8);
+  assert.equal(tent.dimensions.height,5);
   assert.equal(tent.floorY, 10.14);
   assert.equal(blocksPoint(tent.colliders(), 20, 34), true);
   tent.setDoor(true);
@@ -50,7 +51,7 @@ test('every selectable tent type, size, color and material creates a complete in
     assert.deepEqual(tent.config, config);
     assert.ok(tent.group.children.length > 30);
     assert.ok(tent.dimensions.width >= 9);
-    assert.equal(tent.interiorTargets.length, 3);
+    assert.equal(tent.interiorTargets.length, 4);
     tent.setInterior(true); assert.equal(tent.shell.visible, true);
     tent.dispose();
   }
@@ -79,4 +80,25 @@ test('halved tent keeps a usable doorway for the largest camper collision capsul
   const closed=resolveMovement(start,delta,tent.colliders(),.55);assert.ok(closed.z>4.6);
   tent.setDoor(true);const entered=resolveMovement(start,delta,tent.colliders(),.55);assert.ok(entered.z<3);
   assert.ok(tent.dimensions.height>=3);tent.dispose();
+});
+
+
+test('shop keeps a solid visible ceiling and warm lamps after entering and leaving', () => {
+  const shop=createShop(new THREE.Scene(),{x:0,y:0,z:0});
+  for(const inside of [false,true,false,true]){shop.setInterior(inside);assert.equal(shop.roof.visible,true);assert.equal(shop.ceiling.visible,true);}
+  assert.ok(shop.interiorLights.length>=2);assert.ok(shop.interiorLights.every(l=>l.intensity>0&&l.position.y>4));
+  shop.group.updateMatrixWorld(true);
+  const ray=new THREE.Raycaster(new THREE.Vector3(0,2,0),new THREE.Vector3(0,1,0));
+  assert.ok(ray.intersectObject(shop.ceiling).length>0,'looking up indoors hits a real ceiling');shop.dispose();
+});
+
+test('both beds look through actual transparent skylights for every tent shape', () => {
+  for(const type of TENT_OPTIONS.type){
+    const tent=createTent(new THREE.Scene(),{...DEFAULT_TENT,type},{x:20,y:10,z:30,rotation:.4});tent.group.updateMatrixWorld(true);
+    for(const bed of tent.interiorTargets.filter(i=>i.id.startsWith('tent-bedding'))){
+      assert.equal(tent.isInside(bed.restPosition.x,bed.restPosition.z),true);
+      const ray=new THREE.Raycaster(bed.eyePosition,new THREE.Vector3(0,1,0));const hits=ray.intersectObject(tent.shell,true);
+      assert.ok(hits.length>0);assert.equal(hits[0].object,tent.skylight);assert.ok(hits[0].object.material.opacity<.3);
+    }tent.dispose();
+  }
 });

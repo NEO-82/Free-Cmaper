@@ -15,6 +15,8 @@ const entries = {
   brightness: ['화면 밝기', 'Brightness'], sensitivity: ['마우스 감도', 'Mouse sensitivity'],
   invertX: ['마우스 좌우 반전', 'Invert horizontal mouse'], invertY: ['마우스 상하 반전', 'Invert vertical mouse'], language: ['언어', 'Language'],
   controls: ['조작 안내', 'Controls'], controlsNote: ['화면 클릭: 시점 고정 · ESC: 메뉴 · B: 가방 · 물속 Q: 잠수 / Space: 상승', 'Click world: look · ESC: menu · B: bag · Water Q: dive / Space: rise'],
+  lyingDown: ['침대에 눕는 중', 'Lying down'], gettingUp: ['침대에서 일어나는 중', 'Getting up'],
+  lieInBed: ['침대에 누워 하늘 보기', 'Lie back and watch the sky'], getUp: ['침대에서 일어나기', 'Get out of bed'], lyingBack: ['누워서 쉬는 중', 'Lying back'], bedRestStarted: ['천창 너머 하늘을 바라보며 쉬어요. F키로 일어나세요.', 'Watch the sky through the skylight. Press F to get up.'], gotUp: ['침대에서 일어났어요.', 'You got out of bed.'],
   run: ['달리기 · 걷기의 3배', 'Run · 3× walking'], sneak: ['살짝 숙여 천천히 걷기', 'Sneak slowly while held'], sneaking: ['살금살금', 'Sneaking'], runningState: ['달리는 중', 'Running'],
   move: ['이동', 'Move'], look: ['시점 이동', 'Look'], jump: ['점프', 'Jump'], slow: ['천천히 이동', 'Walk slowly'], crouch: ['앉기 / 일어서기', 'Crouch / stand'], prone: ['엎드리기 / 일어서기', 'Prone / stand'], backpack: ['백팩', 'Backpack'],
   prepTitle: ['나만의 속도로\n머무는 곳', 'Pack light.\nMake room for quiet.'], prepNote: ['작은 배낭에 필요한 것만 담고 일주일의 여정을 떠나요.', 'Pack the essentials and head out for a week in the wild.'],

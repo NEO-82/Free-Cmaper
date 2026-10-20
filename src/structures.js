@@ -16,7 +16,7 @@ export function normalizeTentConfig(config = {}) {
 }
 export function tentDimensions(config = DEFAULT_TENT) {
   const scale = SIZE_SCALE[normalizeTentConfig(config).size];
-  return { width: 9 * scale, depth: 8 * scale, height: 3.5 * scale, scale };
+  return { width: 9 * scale, depth: 8 * scale, height: 5 * scale, scale };
 }
 
 function canvasTexture(kind, color = '#ffffff') {
@@ -166,6 +166,16 @@ export function createShop(scene, position) {
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, .5, 1], 2)); geometry.computeVertexNormals();
     add(roof, geometry, material('#c0a376', { side: THREE.DoubleSide }));
   }
+  // A permanent timber ceiling under the roof, with warm suspended indoor lamps.
+  const ceiling=box(group,19.7,.18,16.7,material('#d8bb8c'),0,6.65,0);ceiling.name='Shop ceiling';
+  for(const z of [-5,0,5])box(group,19.8,.22,.23,beam,0,6.4,z);
+  const interiorLights=[];
+  for(const x of [-4.5,4.5]){
+    rod(group,[x,6.5,-1],[x,5.9,-1],.035,metal);
+    add(group,new THREE.SphereGeometry(.3,12,8),material('#fff0be',{emissive:'#ffd18a',emissiveIntensity:2.2}),x,5.75,-1).scale.set(1,.65,1);
+    const shade=add(group,new THREE.ConeGeometry(.65,.3,16,1,true),material('#6d9987',{side:THREE.DoubleSide}),x,5.98,-1);
+    const light=new THREE.PointLight('#ffe0ae',42,19,1.5);light.position.set(x,5.55,-1);light.name='Shop indoor lamp';group.add(light);interiorLights.push(light);
+  }
   label(group, 'TRAIL OUTFITTER', 0, 5.45, 8.91, 10, 1.15);
   for (const side of [-1, 1]) flowerBox(group, side * 6.6, 1.35, 8.98, beam, material('#51a34c'), material('#ffffff'));
   for (const x of [-1.72, 1.72]) for (let i = 0; i < 3; i++) {
@@ -247,7 +257,7 @@ export function createShop(scene, position) {
     box(group, .1, .58, .1, material('#624431'), x, 1.72, -8.1);
   }
   const model = {
-    group, doorPivot, doorOpen: false, roof, owner,
+    group, doorPivot, doorOpen: false, roof, ceiling, interiorLights, owner,
     doorPosition: worldPosition(origin, 0, .3, 8.9),
     entrance: worldPosition(origin, 0, .3, 6.2),
     ownerPosition: worldPosition(origin, 3, .3, -5.7),
@@ -260,7 +270,7 @@ export function createShop(scene, position) {
     ],
     setDoor(open) { this.doorOpen = !!open; doorPivot.rotation.y = this.doorOpen ? -Math.PI / 2 : 0; },
     isInside(x, z) { const p = localPosition(origin, x, z); return Math.abs(p.x) < 9.7 && Math.abs(p.z) < 8.2; },
-    setInterior(inside) { roof.visible = !inside; },
+    setInterior(inside) { this.interior = !!inside; roof.visible = true; ceiling.visible = true; },
     colliders() {
       return [
         collider(origin, -10.2, -9.8, -8.7, 8.7, true, 'shop-wall'), collider(origin, 9.8, 10.2, -8.7, 8.7, true, 'shop-wall'),
@@ -283,23 +293,25 @@ export function createShop(scene, position) {
 function performanceNow() { return typeof performance !== 'undefined' ? performance.now() : 0; }
 
 function archGeometry(width, depth, height, type) {
-  const position = [], uv = [], indices = [], segments = type === 'ridge' ? 2 : 24, depthSegments = type === 'dome' ? 12 : 1;
-  function roofY(x, z = 0) {
-    const u = Math.abs(x / (width / 2));
-    if (type === 'ridge') return height * (.43 + .57 * (1 - u));
-    const dome = type === 'dome' ? Math.sqrt(Math.max(0, 1 - (z / (depth / 2) * .55) ** 2)) : 1;
-    return height * (.34 + .66 * Math.sqrt(Math.max(0, 1 - u * u)) * dome);
+  function roofY(x,z=0) {
+    const u=Math.abs(x/(width/2));
+    if(type==='ridge')return height*(.43+.57*(1-u));
+    const dome=type==='dome'?Math.sqrt(Math.max(0,1-(z/(depth/2)*.55)**2)):1;
+    return height*(.34+.66*Math.sqrt(Math.max(0,1-u*u))*dome);
   }
-  for (let i = 0; i <= segments; i++) for (let j = 0; j <= depthSegments; j++) {
-    const x = -width / 2 + width * i / segments, z = -depth / 2 + depth * j / depthSegments;
-    position.push(x, roofY(x, z), z); uv.push(i / segments * 3, j / depthSegments * 3);
-    if (i < segments && j < depthSegments) {
-      const k = i * (depthSegments + 1) + j, stride = depthSegments + 1;
-      indices.push(k, k + 1, k + stride, k + 1, k + stride + 1, k + stride);
-    }
+  const windows=[-1,1].map(side=>({minX:side*width*.29-width*.095,maxX:side*width*.29+width*.095,minZ:-depth*.34,maxZ:-depth*.02}));
+  const sorted=values=>[...new Set(values)].sort((a,b)=>a-b);
+  const xs=sorted([...Array.from({length:25},(_,i)=>-width/2+i/24*width),...windows.flatMap(w=>[w.minX,w.maxX])]);
+  const zs=sorted([...Array.from({length:13},(_,i)=>-depth/2+i/12*depth),windows[0].minZ,windows[0].maxZ]);
+  const positions=[],uvs=[],opaque=[],clear=[];
+  for(const x of xs)for(const z of zs){positions.push(x,roofY(x,z),z);uvs.push((x/width+.5)*3,(z/depth+.5)*3);}
+  for(let i=0;i<xs.length-1;i++)for(let j=0;j<zs.length-1;j++){
+    const x=(xs[i]+xs[i+1])/2,z=(zs[j]+zs[j+1])/2;
+    const indices=windows.some(w=>x>w.minX&&x<w.maxX&&z>w.minZ&&z<w.maxZ)?clear:opaque;
+    const k=i*zs.length+j,n=zs.length;indices.push(k,k+1,k+n,k+1,k+n+1,k+n);
   }
-  const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(position, 3)); geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geometry.setIndex(indices); geometry.computeVertexNormals();
-  return { geometry, roofY };
+  function geometry(indices){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));g.setIndex(indices);g.computeVertexNormals();return g;}
+  return {geometry:geometry(opaque),windowGeometry:geometry(clear),windows,roofY};
 }
 function endPanel(parent, width, depth, roofY, mat, front, doorWidth = 0, doorHeight = 0) {
   const xs = [-width / 2, ...Array.from({ length: 25 }, (_, i) => -width / 2 + width * i / 24), -doorWidth / 2, doorWidth / 2, width / 2].sort((a, b) => a - b).filter((v, i, list) => i === 0 || v - list[i - 1] > .001);
@@ -313,7 +325,7 @@ function endPanel(parent, width, depth, roofY, mat, front, doorWidth = 0, doorHe
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); geo.setIndex(indices); geo.computeVertexNormals(); return add(parent, geo, mat);
 }
 
-/** Standard tent is 9×8×3.5m with a full-height walk-through entrance. */
+/** Standard tent is 9×8×5m with a full-height walk-through entrance. */
 export function createTent(scene, requestedConfig = DEFAULT_TENT, position = {}) {
   const config = normalizeTentConfig(requestedConfig), dims = tentDimensions(config), { width: w, depth: d, height: h, scale: s } = dims;
   const origin = { x: 0, y: 0, z: 0, rotation: 0, ...position };
@@ -323,8 +335,13 @@ export function createTent(scene, requestedConfig = DEFAULT_TENT, position = {})
   const floor = material('#526b5e', { side: THREE.DoubleSide }), bedding = material('#deb978'), dark = material('#2d665d');
   box(group, w, .12, d, floor, 0, .06, 0);
   const shell = new THREE.Group(); group.add(shell);
-  const { geometry, roofY } = archGeometry(w, d, h, config.type);
+  const { geometry, windowGeometry, windows, roofY } = archGeometry(w, d, h, config.type);
   add(shell, geometry, fabric);
+  const skylight=add(shell,windowGeometry,material('#cdeeed',{transparent:true,opacity:.12,depthWrite:false,side:THREE.DoubleSide,roughness:.18}));skylight.name='Tent skylights';skylight.castShadow=false;
+  for(const window of windows){
+    const points=[[window.minX,window.minZ],[window.maxX,window.minZ],[window.maxX,window.maxZ],[window.minX,window.maxZ],[window.minX,window.minZ]].map(([x,z])=>[x,roofY(x,z)+.025,z]);
+    tubeLine(shell,points,.035*s,trim,24);
+  }
   const edgeY = roofY(w / 2);
   box(shell, .05, edgeY, d, fabric, -w / 2, edgeY / 2, 0);
   box(shell, .05, edgeY, d, fabric, w / 2, edgeY / 2, 0);
@@ -388,14 +405,16 @@ export function createTent(scene, requestedConfig = DEFAULT_TENT, position = {})
   add(mug, new THREE.TorusGeometry(.13 * s, .035 * s, 6, 12), material('#e8dfbd'), .25 * s, 0, 0);
   box(group, .5 * s, .045 * s, .7 * s, material('#d9c699'), -.4 * s, .8 * s, -d * .28);
   const model = {
-    group, shell, config, dimensions: dims, doorPivot, doorOpen: false,
+    group, shell, skylight, config, dimensions: dims, doorPivot, doorOpen: false,
+    roofHeightAt(x,z) {const p=localPosition(origin,x,z);return origin.y+roofY(p.x,p.z);},
     entrance: worldPosition(origin, 0, .14, d / 2 + 1),
     doorPosition: worldPosition(origin, 0, .14, d / 2 + .1),
     insidePosition: worldPosition(origin, 0, .14, d / 2 - 2.1),
     floorY: origin.y + .14,
     bounds: { minX: origin.x - w / 2, maxX: origin.x + w / 2, minZ: origin.z - d / 2, maxZ: origin.z + d / 2 },
     interiorTargets: [
-      { id: 'tent-bedding', position: worldPosition(origin, -w * .29, .3, -d * .12), labelKey: 'bedding' },
+      ...[-1,1].map(side=>({id:side<0?'tent-bedding-left':'tent-bedding-right',position:worldPosition(origin,side*w*.29,.4,-d*.12),labelKey:'bedding',
+        restPosition:worldPosition(origin,side*w*.29,.14,d*.08),eyePosition:worldPosition(origin,side*w*.29,1.26,d*.08-2.35)})),
       { id: 'tent-lantern', position: worldPosition(origin, 0, .7, -d * .28), labelKey: 'lantern' },
       { id: 'tent-backpack', position: worldPosition(origin, -w * .36, .5, d * .2), labelKey: 'backpack' },
     ],

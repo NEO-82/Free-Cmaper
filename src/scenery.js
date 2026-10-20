@@ -28,7 +28,6 @@ export function createScenery(scene) {
       c.lineTo(x,height);
     }
     c.lineTo(2048,512);c.closePath();c.fill();
-    if(layer===1){c.strokeStyle='#e9efdc';c.lineWidth=5;for(let x=55;x<2048;x+=150){c.beginPath();c.moveTo(x,245);c.lineTo(x+18,229);c.lineTo(x+35,245);c.stroke();}}
   }
   const map=new THREE.CanvasTexture(canvas);map.colorSpace=THREE.SRGBColorSpace;
   const mountainMaterial=new THREE.MeshBasicMaterial({map,transparent:true,side:THREE.DoubleSide,depthWrite:false,fog:true});

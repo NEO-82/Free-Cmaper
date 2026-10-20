@@ -33,3 +33,7 @@ export function verticalStep(height, velocity, dt) {
 export function timeAdvances({ running, paused, backpackOpen, optionsOpen, hidden }) {
   return running && !paused && !backpackOpen && !optionsOpen && !hidden;
 }
+
+export function canJump({cameraMode,resting=false,water=false,posture='stand',height=0}) {
+  return cameraMode!=='tent' && !resting && !water && posture==='stand' && height===0;
+}
