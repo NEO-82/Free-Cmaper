@@ -23,3 +23,17 @@ test('rest animation progresses continuously, reverses to get up, and freezes wh
   for(let i=0;i<60;i++)progress=restStep(progress,0,1/30);
   assert.equal(progress,0);
 });
+
+
+test('the larger head reclines face-up above the bedding and the first-person camera stays at its eyes',()=>{
+  const model=createCamper(new THREE.Scene());model.root.position.y=.14;
+  for(const age of ['young','middle','older'])for(const gender of ['male','female']){
+    model.configure({age,gender});poseBedRest(model,1);model.root.updateMatrixWorld(true);
+    const faceUp=new THREE.Vector3(0,0,1).transformDirection(model.head.matrixWorld);
+    assert.ok(faceUp.y>.999);
+    const eye=model.head.localToWorld(new THREE.Vector3(0,0,.58));
+    assert.ok(eye.distanceTo(new THREE.Vector3(0,1.91,-2.02))<.04);
+    assert.ok(new THREE.Box3().setFromObject(model.head,true).min.y>.69);
+  }
+  model.dispose();
+});

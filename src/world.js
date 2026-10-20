@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { arrivalReserved, nearArrivalRoad, arrivalRoadPoint } from './journey.js';
 import { createGroundCover } from './groundcover.js';
 import * as geography from './terrain.js';
 const { WORLD, SHOP, SUMMIT, LAKE, terrainHeight, isWater, riverX, trailPoint, trailSurfaceAt, terrainSlope } = geography;
@@ -132,10 +133,11 @@ export function createWorld(scene) {
   ribbon(trailSamples, 3.8, trailMaterial, group);
   const shopTrail = Array.from({ length: 110 }, (_, i) => ({ x: SHOP.x + Math.sin(i / 24) * 3, z: -12 + i / 109 * (WORLD.maxZ + 11) }));
   ribbon(shopTrail, 4.2, trailMaterial, group);
+  ribbon(Array.from({length:180},(_,i)=>arrivalRoadPoint(i/179)),9,trailMaterial,group);
   function nearTrail(x, z) { return trailSurfaceAt(x,z).distance < 4.6; }
   const cliffSites = [{ x: -58, z: -37, r: 6.2 }, { x: -72, z: -45, r: 8.2 }, { x: -64, z: -59, r: 5.4 }];
   function reserved(x, z) {
-    return isWater(x, z) || cliffSites.some(p => Math.hypot(x - p.x, z - p.z) < p.r + 3) || x > coastStart - 4 || (x > SHOP.x - 19 && x < SHOP.x + 19 && z > SHOP.z - 19 && z < SHOP.z + 17) || Math.hypot(x - SUMMIT.x, z - SUMMIT.z) < SUMMIT.radius + 5 || nearTrail(x, z) || Math.hypot(x - SHOP.x, z + 12) < 8;
+    return arrivalReserved(x,z) || nearArrivalRoad(x,z,8) || isWater(x, z) || cliffSites.some(p => Math.hypot(x - p.x, z - p.z) < p.r + 3) || x > coastStart - 4 || (x > SHOP.x - 19 && x < SHOP.x + 19 && z > SHOP.z - 19 && z < SHOP.z + 17) || Math.hypot(x - SUMMIT.x, z - SUMMIT.z) < SUMMIT.radius + 5 || nearTrail(x, z) || Math.hypot(x - SHOP.x, z + 12) < 8;
   }
   const trunkGeo = coloredGeometry(new THREE.CylinderGeometry(.62, 1, 1, 10, 3), '#ab8140', '#ffdc90');
   const branchGeo = new THREE.CylinderGeometry(.13, .25, 1, 6);
@@ -221,6 +223,7 @@ export function createWorld(scene) {
   // the ground richly planted at actual walking scale, not only in a map view.
   const grassMaterial = new THREE.MeshStandardMaterial({ color: '#87d94b', vertexColors: true, roughness: .95, side: THREE.DoubleSide });
   const groundCover=createGroundCover(group,{geometry:tuftGeometry(),material:grassMaterial,heightAt:terrainHeight,allowed:(x,z)=>{
+    if(arrivalReserved(x,z)||nearArrivalRoad(x,z,5))return false;
     if(x<WORLD.minX||x>coastStart-2||z<WORLD.minZ||z>WORLD.maxZ||isWater(x,z)||nearTrail(x,z))return false;
     if(x>SHOP.x-11&&x<SHOP.x+11&&z>SHOP.z-10&&z<SHOP.z+14)return false;
     if(z>-12&&Math.abs(x-SHOP.x)<5)return false;

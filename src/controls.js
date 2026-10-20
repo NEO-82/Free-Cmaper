@@ -18,7 +18,7 @@ export function lookAngles(yaw, pitch, dx, dy, options) {
   };
 }
 export function movementSpeed(mode, posture, sprint = false, creep = false) {
-  const base = mode === 'car' ? 4 : 1.5;
+  const base = mode === 'car' ? 8 : 3;
   const stance = posture === 'prone' ? .25 : posture === 'crouch' ? .5 : 1;
   return base * stance * (creep ? .4 : sprint ? 3 : 1);
 }

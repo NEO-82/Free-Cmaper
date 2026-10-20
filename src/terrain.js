@@ -4,6 +4,7 @@ const MAP_SCALE = Math.sqrt(3);
 export const WORLD = Object.freeze({ minX: -870 * MAP_SCALE, maxX: 870 * MAP_SCALE, minZ: -690 * MAP_SCALE, maxZ: 690 * MAP_SCALE, landMaxX: 285 * MAP_SCALE });
 // The unreachable ring has twice the playable area; total scenery is 3×.
 export const SCENERY = Object.freeze({ minX: WORLD.minX * Math.sqrt(3), maxX: WORLD.maxX * Math.sqrt(3), minZ: WORLD.minZ * Math.sqrt(3), maxZ: WORLD.maxZ * Math.sqrt(3) });
+export const ARRIVAL = Object.freeze({ x: WORLD.minX + 62, z: 85 });
 export const SHOP = Object.freeze({ x: -30, z: -35 });
 export const SUMMIT = Object.freeze({ x: -145, z: -195, radius: 20, height: 176 });
 export const LAKE = Object.freeze({ x: -160, z: 250, radiusX: 55, radiusZ: 42 });
@@ -58,6 +59,9 @@ export function terrainHeight(x, z) {
   const outsideShop = Math.hypot(Math.max(-46 - x, 0, x + 14), Math.max(-50 - z, 0, z + 18));
   const shopBlend = 1 - smooth(0, 12, outsideShop);
   h = h * (1 - shopBlend) + 2.5 * shopBlend;
+  const outsideArrival = Math.hypot(Math.max(Math.abs(x-ARRIVAL.x)-54,0),Math.max(Math.abs(z-ARRIVAL.z)-65,0));
+  const arrivalBlend = 1-smooth(0,12,outsideArrival);
+  h = h*(1-arrivalBlend)+2.5*arrivalBlend;
   const coast = smooth(COAST_START, WORLD.landMaxX + 8, x);
   h = h * (1 - coast) - coast * 2.8;
   if (x >= WORLD.landMaxX) h = -3.5 - Math.min(5, (x - WORLD.landMaxX) * 0.025);

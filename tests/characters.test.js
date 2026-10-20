@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { createCamper, poseCamper } from '../src/characters.js';
 
-const bounds = model => { model.root.updateMatrixWorld(true); return new THREE.Box3().setFromObject(model.root); };
+const bounds = model => { model.root.updateMatrixWorld(true); return new THREE.Box3().setFromObject(model.root, true); };
 
-test('camper has a sculpted face, articulated limbs and a detailed hiking pack at human gameplay scale', () => {
+test('round camper retains its articulated limbs, small hiking pack and gameplay scale', () => {
   const scene = new THREE.Scene(), model = createCamper(scene);
   assert.equal(scene.children[0], model.root);
   assert.equal(model.legs.length, 2); assert.equal(model.knees.length, 2); assert.equal(model.ankles.length, 2);
@@ -64,5 +64,19 @@ test('walking bends opposite limbs and keeps every transform finite across pose 
   assert.ok(model.legs[0].rotation.x * model.legs[1].rotation.x < 0);
   assert.ok(model.arms[0].rotation.x * model.legs[0].rotation.x < 0);
   assert.ok(bounds(model).min.y >= -.01);
+  model.dispose();
+});
+
+
+test('the large round face takes almost half the height while the small pack stays below the head',()=>{
+  const model=createCamper(new THREE.Scene());
+  for(const age of ['young','middle','older'])for(const gender of ['male','female'])for(const bodyType of ['normal','large','slim']){
+    model.configure({age,gender,bodyType});poseCamper(model,'stand');model.root.updateMatrixWorld(true);
+    const full=bounds(model),face=new THREE.Box3().setFromObject(model.face,true),pack=new THREE.Box3().setFromObject(model.backpack,true);
+    const ratio=(face.max.y-face.min.y)/(full.max.y-full.min.y);
+    assert.ok(ratio>.43&&ratio<.5,`${age}/${gender}/${bodyType}: head ratio ${ratio}`);
+    assert.ok(full.max.y<2.9,'all choices fit the tent doorway');
+    assert.ok(pack.max.y<face.min.y+.2,'the pack does not overwhelm the head');
+  }
   model.dispose();
 });

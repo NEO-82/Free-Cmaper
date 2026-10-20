@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { weatherState } from './weather.js';
+import { createSkyDetails } from './sky-details.js';
 
 // All visual assets are generated locally, so the downloadable game stays offline.
 export function weatherTextures() {
@@ -43,7 +44,8 @@ export function createAtmosphere(scene) {
   }));
   sky.name = 'sky-dome'; sky.renderOrder = -1000; sky.frustumCulled = false; scene.add(sky);
   const sunDisc = new THREE.Mesh(new THREE.SphereGeometry(35, 24, 16), new THREE.MeshBasicMaterial({ color: '#fff2bb', fog: false, toneMapped: false }));
-  sunDisc.name = 'sun-disc'; scene.add(sunDisc);
+  sunDisc.name = 'sun-disc';sunDisc.material.transparent=true; scene.add(sunDisc);
+  const details=createSkyDetails(scene);
 
   // One draw call for every cloud lobe, including dense layered storm skies.
   const groupCount = 36, lobesPerGroup = 8, fieldSize = 5200;
@@ -64,10 +66,16 @@ export function createAtmosphere(scene) {
     }
   }
   scene.add(clouds);
-  const starPositions = new Float32Array(520 * 3);
-  for (let i = 0; i < 520; i++) { const a = rand() * Math.PI * 2, h = rand() * 0.965 + 0.035, r = Math.sqrt(1 - h * h); starPositions.set([Math.cos(a) * r * 4400, h * 4400, Math.sin(a) * r * 4400], i * 3); }
+  const starPositions = new Float32Array(1400 * 3);
+  for (let i = 0; i < 1400; i++) { const a = rand() * Math.PI * 2, h = rand() * 0.965 + 0.035, r = Math.sqrt(1 - h * h); starPositions.set([Math.cos(a) * r * 4400, h * 4400, Math.sin(a) * r * 4400], i * 3); }
   const starGeo = new THREE.BufferGeometry(); starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
   const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: '#e4f3ff', size: 1.45, sizeAttenuation: false, transparent: true, opacity: 0.8, fog: false, depthWrite: false, toneMapped: false }));
+  const starTime={value:0};starGeo.setAttribute('twinkle',new THREE.Float32BufferAttribute(Array.from({length:1400},()=>rand()*Math.PI*2),1));
+  stars.material.onBeforeCompile=shader=>{
+    shader.uniforms.skyTime=starTime;
+    shader.vertexShader='attribute float twinkle;varying float vSpark;uniform float skyTime;\n'+shader.vertexShader.replace('#include <begin_vertex>','vSpark=.68+.32*sin(skyTime*1.3+twinkle);\n#include <begin_vertex>');
+    shader.fragmentShader='varying float vSpark;\n'+shader.fragmentShader.replace('vec4 diffuseColor = vec4( diffuse, opacity );','vec2 starPoint=gl_PointCoord-.5;float glow=smoothstep(.25,.015,dot(starPoint,starPoint));vec4 diffuseColor=vec4(diffuse,opacity*vSpark*glow);');
+  };
   stars.name = 'night-stars'; stars.frustumCulled = false; scene.add(stars);
   const styles = {
     clear: { height: 430, spread: 210, width: 1.45, thickness: 0.68, color: '#fffdf3', sky: '#82c4e1', haze: 0 },
@@ -80,7 +88,7 @@ export function createAtmosphere(scene) {
   const shade = new THREE.Color(), nightCloud = new THREE.Color('#26374d'), nightSky = new THREE.Color('#25384d');
   let cloudTransformKey = '', state = { cloudCount: 0, cloudCover: 0, weather: 'clear' };
   return {
-    update(hour, weather, elapsed, center, profile) {
+    update(hour, weather, elapsed, center, profile, season=0) {
       const current = weatherState(weather, profile?.cloudCover), style = styles[weather];
       const cover = current.cloudCover, wind = Number.isFinite(profile?.wind) ? Math.max(0, profile.wind) : current.wind;
       const day = Math.max(0, Math.sin((hour - 5) / 14 * Math.PI));
@@ -98,7 +106,9 @@ export function createAtmosphere(scene) {
       uniforms.sunlight.value.set(isNight ? '#25334b' : '#ffe5b9').multiplyScalar(1 - style.haze);
       sky.position.set(center.x, 0, center.z);
       sunDisc.position.copy(uniforms.sunDirection.value).multiplyScalar(4200); sunDisc.position.x += center.x; sunDisc.position.z += center.z;
-      sunDisc.visible = !isNight && weather === 'clear';
+      sunDisc.material.opacity=weather==='clear'?1-cover*.7:weather==='overcast'?.08:0;
+      sunDisc.visible=uniforms.sunDirection.value.y>0&&sunDisc.material.opacity>.03;
+      details.update(hour,weather,elapsed,center,cover,season,uniforms.sunDirection.value);starTime.value=elapsed;
       clouds.count = cover === 0 ? 0 : Math.max(1, Math.round(groupCount * cover)) * lobesPerGroup;
       clouds.visible = clouds.count > 0;
       const frame = Math.floor(elapsed * 12);
@@ -132,5 +142,6 @@ export function createAtmosphere(scene) {
       return { horizon: uniforms.horizon.value, daylight: day };
     },
     getState() { return { ...state }; },
+    getSkyState(){return details.getState();},
   };
 }

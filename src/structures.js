@@ -414,7 +414,7 @@ export function createTent(scene, requestedConfig = DEFAULT_TENT, position = {})
     bounds: { minX: origin.x - w / 2, maxX: origin.x + w / 2, minZ: origin.z - d / 2, maxZ: origin.z + d / 2 },
     interiorTargets: [
       ...[-1,1].map(side=>({id:side<0?'tent-bedding-left':'tent-bedding-right',position:worldPosition(origin,side*w*.29,.4,-d*.12),labelKey:'bedding',
-        restPosition:worldPosition(origin,side*w*.29,.14,d*.08),eyePosition:worldPosition(origin,side*w*.29,1.26,d*.08-2.35)})),
+        restPosition:worldPosition(origin,side*w*.29,.14,d*.08),eyePosition:worldPosition(origin,side*w*.29,1.91,d*.08-2.02)})),
       { id: 'tent-lantern', position: worldPosition(origin, 0, .7, -d * .28), labelKey: 'lantern' },
       { id: 'tent-backpack', position: worldPosition(origin, -w * .36, .5, d * .2), labelKey: 'backpack' },
     ],

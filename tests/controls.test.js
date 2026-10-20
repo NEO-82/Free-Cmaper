@@ -19,10 +19,10 @@ test('mouse sensitivity scales yaw and pitch, inversion reverses each axis indep
   assert.equal(lookAngles(0, 0.6, 0, 10000, DEFAULT_OPTIONS).pitch, 1.82);
   assert.equal(lookAngles(0, 0.6, 0, -10000, DEFAULT_OPTIONS).pitch, -1.22);
 });
-test('base walking is half the former speed and Shift runs at exactly three times walking', () => {
-  for (const [mode,previous] of [['walk',3],['car',8]]) {
+test('base movement doubles the previous speed and Shift runs at exactly three times walking', () => {
+  for (const [mode,previous] of [['walk',1.5],['car',4]]) {
     const walk=movementSpeed(mode,'stand');
-    assert.equal(walk,previous/2);
+    assert.equal(walk,previous*2);
     assert.equal(movementSpeed(mode,'stand',true),walk*3);
   }
 });
