@@ -4,7 +4,7 @@ const entries = {
   crab: ['꽃게 · 식재료', 'Blue crab · ingredient'], conch: ['소라 · 식재료', 'Sea snail · ingredient'], lobster: ['바닷가제 · 식재료', 'Lobster · ingredient'], collectSeafood: ['해산물 채집하기', 'Gather seafood'], seafoodCollected: ['해산물을 가방에 담았어요. 추후 요리·섭취에 사용할 식재료예요.', 'Seafood stored in your backpack for future cooking and eating.'],
 
   rvMenuHint: ['ESC 정지·꾸미기 · WASD 이동 · F 사용', 'ESC pause/customize · WASD move · F use'],
-  rvEnter: ['캠핑카 실내로 들어가기', 'Enter motorhome interior'],
+  rvEnter: ['캠핑카 뒤쪽 · 실내 들어가기', 'Motorhome rear · enter living area'], rvEnterCab: ['캠핑카 앞쪽 · 운전석 타기', 'Motorhome front · start driving'],
   motorhome: ['캠핑카', 'Motorhome'], motorhomeChoice: ['캠핑카 · 1시간', 'Motorhome · 1 hour'],
   rvCustom: ['캠핑카 내부 꾸미기', 'Customize motorhome'], rvwood: ['목재', 'Wood'], rvbedding: ['침구', 'Bedding'], rvlayout: ['조리대 배치', 'Kitchen layout'],
   rvoak: ['밝은 오크', 'Oak'], rvwalnut: ['월넛', 'Walnut'], rvwhite: ['화이트', 'White'], rvsage: ['세이지', 'Sage'], rvblue: ['블루', 'Blue'], rvterracotta: ['테라코타', 'Terracotta'], rvleft: ['왼쪽', 'Left'], rvright: ['오른쪽', 'Right'],

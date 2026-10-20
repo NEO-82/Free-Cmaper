@@ -1,4 +1,4 @@
-import { createMotorhomeInterior, INTERIOR_CHOICES, normalizeInterior } from './motorhome.js';
+import { createMotorhomeInterior, INTERIOR_CHOICES, normalizeInterior, motorhomeBoarding } from './motorhome.js';
 import * as THREE from 'three';
 import { pathSurfaceHeight } from './paths.js';
 import { createSwimEffects } from './swim-effects.js';
@@ -163,12 +163,12 @@ rvPanel.addEventListener('change',()=>{
 });
 function openRV(){
   if(!vehicle||vehicle.state.kind!=='motorhome'||Math.abs(vehicle.state.speed)>.7)return;
-  rvRoom?.dispose();rvRoom=createMotorhomeInterior(rvSettings);rvInside=true;driving=false;yaw=0;pitch=.32;clearMovement();releaseMouse();sceneDirty=true;syncMenus();renderHUD();toast('rvWelcome');
+  rvRoom?.dispose();rvRoom=createMotorhomeInterior(rvSettings);rvRoom.mount(scene,vehicle.root);player.visible=false;rvInside=true;driving=false;yaw=0;pitch=.32;clearMovement();sceneDirty=true;syncMenus();renderHUD();toast('rvWelcome');
 }
 function leaveRV(drive=false){
   if(!rvInside)return;
   if(!drive&&!dismountPosition(vehicle.state,allColliders().filter(c=>c.id!=='player-vehicle'))){toast('noDismount');return;}
-  rvInside=false;rvRoom.dispose();rvRoom=null;sceneDirty=true;
+  rvInside=false;rvRoom.dispose();rvRoom=null;sceneDirty=true;camera.up.set(0,1,0);
   $('[data-i18n="menuHint"]').textContent=t('menuHint');
   if(drive){cameraMode='outdoor';enterVehicle();}else exitVehicle();
   syncMenus();renderHUD();
@@ -191,9 +191,18 @@ function renderRV(dt, realSeconds){
     if(elapsed>=7*24*120){rvInside=false;rvRoom.dispose();rvRoom=null;finish();return;}
   }
   const p=rvRoom.position;
-  if(rvRoom.resting){camera.position.set(0,1.15,-2);camera.lookAt(Math.sin(yaw)*.5,2.9,-2+Math.cos(yaw)*.5);}
-  else{camera.position.set(p.x,1.8,p.z);camera.lookAt(p.x-Math.sin(yaw)*Math.cos(pitch-.32)*5,1.8-Math.sin(pitch-.32)*5,p.z-Math.cos(yaw)*Math.cos(pitch-.32)*5);}
-  renderer.render(rvRoom.scene,camera);
+  const localEye=rvRoom.resting?new THREE.Vector3(0,1.15,-2):new THREE.Vector3(p.x,1.8,p.z);
+  const localTarget=rvRoom.resting?new THREE.Vector3(Math.sin(yaw)*.5,2.9,-2+Math.cos(yaw)*.5):new THREE.Vector3(p.x-Math.sin(yaw)*Math.cos(pitch-.32)*5,1.8-Math.sin(pitch-.32)*5,p.z-Math.cos(yaw)*Math.cos(pitch-.32)*5);
+  camera.position.copy(rvRoom.toWorld(localEye));camera.up.set(0,1,0).applyQuaternion(rvRoom.scene.quaternion);camera.lookAt(rvRoom.toWorld(localTarget));
+  player.visible=false;
+  const daylight=THREE.MathUtils.clamp(Math.sin((hour()-5)/14*Math.PI),.10,1);
+  ambient.intensity=night()?.65:1.4+Math.sqrt(daylight)*1.8;sun.intensity=daylight*2.5;
+  const center=vehicle.root.position;
+  sun.target.position.copy(center);sun.position.set(center.x+Math.cos(hour()/24*Math.PI*2)*80,center.y+Math.max(16,daylight*110),center.z-45);
+  const sky=atmosphere.update(hour(),weather,elapsed,center,weatherProfile,season);
+  scene.fog.color.copy(sky.horizon);scene.fog.density=weather==='fog'?.0045:.00038;
+  if(advancing()){world.animate(dt,elapsed,center);marine.update(dt,elapsed,center);world.updateCover(center,camp?.bounds);}
+  renderer.render(scene,camera);
   if(performance.now()-lastHUD>250){renderHUD();lastHUD=performance.now();}
   $('[data-i18n="menuHint"]').textContent=t('rvMenuHint');
   $('#status').textContent=t('rvInterior')+' · '+t(rvRoom.resting?'lyingBack':'stand');
@@ -328,7 +337,7 @@ $('#world-map-close').onclick=toggleWorldMap;$('#open-map').onclick=toggleWorldM
 function hour() { return (5 + elapsed / 120) % 24; }
 function night() { return hour() < 6 || hour() >= 19; }
 function finish() {
-  rvInside=false;rvRoom?.dispose();rvRoom=null;
+  rvInside=false;rvRoom?.dispose();rvRoom=null;camera.up.set(0,1,0);
   running = false; clearMovement(); releaseMouse(); $('#shop-modal').classList.add('hidden'); shopOpen = false;
   $('#hud').classList.add('hidden'); $('#pause-menu').classList.add('hidden'); $('#backpack-modal').classList.add('hidden'); $('#options-modal').classList.add('hidden'); backpackOpen = optionsOpen = false; paused = false; syncMenus(); audio.setMode('calm');
   const el = document.createElement('div'); el.className = 'end';
@@ -435,7 +444,10 @@ function updateContext() {
     const d = flatDistance(point);
     if (d <= range) candidates.push({ kind, point, label, object, score: d + priority });
   };
-  if(vehicle&&cameraMode==='outdoor')add('enterVehicle',vehicle.root.position,vehicle.config.radius+2.2,vehicle.state.kind==='motorhome'?'rvEnter':'enterVehicle',vehicle,-3);
+  if(vehicle&&cameraMode==='outdoor'){
+    const living=vehicle.state.kind==='motorhome'&&motorhomeBoarding(vehicle.state,player.position)==='interior';
+    add(living?'enterRV':'enterVehicle',vehicle.root.position,vehicle.config.radius+2.2,living?'rvEnter':vehicle.state.kind==='motorhome'?'rvEnterCab':'enterVehicle',vehicle,-3);
+  }
   for(const stop of transit.targets)add('transit',stop.position,4,stop.id==='bus'?'busStop':'trainStation',stop,-1);
   add('shopDoor', shopBuilding.doorPosition, 3.5, shopBuilding.doorOpen ? 'closeDoor' : 'openDoor', shopBuilding, -1.2);
   if (cameraMode === 'shop') {
@@ -492,7 +504,8 @@ function interact() {
   if(action.kind==='packGear'){if(homeRoom.pack(action.object.id)){addInventory(action.object.id);toast('gearPacked');}renderHUD();return;}
   if(action.kind==='homeDoor'){openJourney();return;}
   if(action.kind==='homeHelp'){toast('homeWelcome');return;}
-  if(action.kind==='enterVehicle'){if(vehicle.state.kind==='motorhome')openRV();else enterVehicle();return;}
+  if(action.kind==='enterVehicle'){enterVehicle();return;}
+  if(action.kind==='enterRV'){openRV();return;}
   if(action.kind==='exitVehicle'){exitVehicle();return;}
   if(action.kind==='transit'){toast(action.object.id==='bus'?'busInfo':'trainInfo');return;}
   if (action.kind === 'getUp') { toggleBedRest();return; }
@@ -639,7 +652,7 @@ function stepGame(dt, now, realSeconds) {
   if(driving){
     const input={forward:keys.has('KeyW')||keys.has('ArrowUp'),backward:keys.has('KeyS')||keys.has('ArrowDown'),left:keys.has('KeyA')||keys.has('ArrowLeft'),right:keys.has('KeyD')||keys.has('ArrowRight'),brake:keys.has('Space')};
     const next=stepDrive(vehicle.state,input,dt,allColliders());vehicle.update(next,dt,Number(input.left)-Number(input.right));
-    const offset=new THREE.Vector3(vehicle.state.kind==='scooter'?0:-.55,vehicle.state.kind==='scooter'?.80:.66,vehicle.state.kind==='scooter'?-.20:0).applyQuaternion(vehicle.root.quaternion);
+    const offset=new THREE.Vector3(vehicle.state.kind==='scooter'?0:-.55,vehicle.state.kind==='scooter'?.80:.66,vehicle.state.kind==='motorhome'?2.5:vehicle.state.kind==='scooter'?-.20:0).applyQuaternion(vehicle.root.quaternion);
     player.position.copy(vehicle.root.position).add(offset);player.quaternion.copy(vehicle.root.quaternion);poseCamper(camper,'sit');camper.backpack.visible=false;camper.arms.forEach((arm,i)=>{arm.rotation.x=-1.05;camper.elbows[i].rotation.x=-.25;});
     dir.set(0,0,0);
   }
@@ -816,7 +829,7 @@ addEventListener('resize', () => { sceneDirty = true;
 syncOptions(); localize(); requestAnimationFrame(animate);
 if (import.meta.env.DEV) {
   window.__camper = {
-    snapshot: () => ({ cameraDistance:dist, firstPerson:isFirstPerson(dist)||rvInside, cameraPosition:(phase==='home'||phase==='setup'?homeCamera:camera).position.toArray(), avatarVisible:player.visible, shoreWaves:world.shoreWaves.getState(), avatar:camper.settings, rvInside, rvSettings, rvPosition:rvRoom?.position.toArray(), rvResting:rvRoom?.resting, running, paused, phase, journeyOpen, mapOpen, driving, vehicle:vehicle?{...vehicle.state}:null, homeGear:homeRoom.gear.map(g=>({id:g.id,packed:g.packed,position:g.position.toArray()})), simulationSeconds, pose: displayPosture(), bodyRotation:camper.body.rotation.toArray(), bodyLean: camper.upperBody.rotation.x, jumpHeight,person:person?{...person}:null, bedRest:bedRest?{progress:bedRest.progress,target:bedRest.target,bed:bedRest.bed.id}:null, shopRoof:shopBuilding.roof.visible, shopCeiling:shopBuilding.ceiling.visible, indoorLights:shopBuilding.interiorLights.length, groundCover:world.groundCover.getState(), backpackOpen, optionsOpen, shopOpen, weather, weatherProfile, atmosphere: atmosphere.getState?.(), skyEvents:atmosphere.getSkyState(), audio: audio.getState(), marine: marine.getState(), harvestables:marine.harvestables.map(g=>({id:g.userData.id,kind:g.userData.kind,collected:g.userData.collected,position:g.position.toArray()})), seaLife: marine.creatures.slice(0,8).map(g=>g.position.toArray()), diveDepth, inWater: inWater(), cameraY: camera.position.y, viewDirection: camera.getWorldDirection(new THREE.Vector3()).toArray(), world: WORLD, scenery: scenery.bounds, cameraMode, elapsed, money, inventory: Object.fromEntries(inventory), player: player.position.toArray(), yaw, pitch, tentConfig: { ...tentConfig }, treeCount, shopDoor: shopBuilding.doorOpen, context: contextAction?.kind, nearbyPlatforms:world.platformsNear(player.position.x,player.position.z), trees: world.trees.map(({ id, x, z, y, h, radius, hits, felled }) => ({ id, x, z, y, h, radius, hits, felled })), camp: camp ? { position: camp.group.position.toArray(), entrance: camp.entrance.toArray(), inside: camp.insidePosition.toArray(), doorOpen: camp.doorOpen, bounds: camp.bounds,dimensions:camp.dimensions,beds:camp.interiorTargets.filter(i=>i.id.startsWith('tent-bedding')).map(i=>({id:i.id,position:i.position.toArray(),rest:i.restPosition.toArray(),eye:i.eyePosition.toArray()})) } : null }),
+    snapshot: () => ({ cameraDistance:dist, firstPerson:isFirstPerson(dist)||rvInside, cameraPosition:(phase==='home'||phase==='setup'?homeCamera:camera).position.toArray(), avatarVisible:player.visible, shoreWaves:world.shoreWaves.getState(), avatar:camper.settings, rvInside, rvSettings, rvPosition:rvRoom?.position.toArray(), rvWorldPosition:rvRoom?.toWorld(rvRoom.position).toArray(), rvExteriorVisible:vehicle?.root.visible, rvMounted:rvRoom?.scene.parent===scene, rvResting:rvRoom?.resting, running, paused, phase, journeyOpen, mapOpen, driving, vehicle:vehicle?{...vehicle.state}:null, homeGear:homeRoom.gear.map(g=>({id:g.id,packed:g.packed,position:g.position.toArray()})), simulationSeconds, pose: displayPosture(), bodyRotation:camper.body.rotation.toArray(), bodyLean: camper.upperBody.rotation.x, jumpHeight,person:person?{...person}:null, bedRest:bedRest?{progress:bedRest.progress,target:bedRest.target,bed:bedRest.bed.id}:null, shopRoof:shopBuilding.roof.visible, shopCeiling:shopBuilding.ceiling.visible, indoorLights:shopBuilding.interiorLights.length, groundCover:world.groundCover.getState(), backpackOpen, optionsOpen, shopOpen, weather, weatherProfile, atmosphere: atmosphere.getState?.(), skyEvents:atmosphere.getSkyState(), audio: audio.getState(), marine: marine.getState(), harvestables:marine.harvestables.map(g=>({id:g.userData.id,kind:g.userData.kind,collected:g.userData.collected,position:g.position.toArray()})), seaLife: marine.creatures.slice(0,8).map(g=>g.position.toArray()), diveDepth, inWater: inWater(), cameraY: camera.position.y, viewDirection: camera.getWorldDirection(new THREE.Vector3()).toArray(), world: WORLD, scenery: scenery.bounds, cameraMode, elapsed, money, inventory: Object.fromEntries(inventory), player: player.position.toArray(), yaw, pitch, tentConfig: { ...tentConfig }, treeCount, shopDoor: shopBuilding.doorOpen, context: contextAction?.kind, nearbyPlatforms:world.platformsNear(player.position.x,player.position.z), trees: world.trees.map(({ id, x, z, y, h, radius, hits, felled }) => ({ id, x, z, y, h, radius, hits, felled })), camp: camp ? { position: camp.group.position.toArray(), entrance: camp.entrance.toArray(), inside: camp.insidePosition.toArray(), doorOpen: camp.doorOpen, bounds: camp.bounds,dimensions:camp.dimensions,beds:camp.interiorTargets.filter(i=>i.id.startsWith('tent-bedding')).map(i=>({id:i.id,position:i.position.toArray(),rest:i.restPosition.toArray(),eye:i.eyePosition.toArray()})) } : null }),
     setVehiclePosition(x,z,heading=0){if(vehicle){driving=false;vehicle.update({kind:vehicle.state.kind,x,z,heading,speed:0});sceneDirty=true;}},
     validateTrail(){
       const first=trailPoint(0),colliders=allColliders();let state=createPerson({...first,y:pathSurfaceHeight(first.x,first.z)}),length=0,previous=first;
