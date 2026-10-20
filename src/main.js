@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { DEFAULT_OPTIONS, normalizeOptions, lookAngles, movementSpeed, togglePosture, verticalStep, timeAdvances } from './controls.js';
 import { translate, seasonKeys } from './i18n.js';
+import { WORLD, SHOP, SUMMIT, terrainHeight, isWater, resolveMovement } from './terrain.js';
+import { createWorld } from './world.js';
+import { findCampLocation } from './placement.js';
+import { createShop, createTent } from './structures.js';
+import { GOODS, DEFAULT_TENT_CONFIG, TENT_CHOICES, tentPrice, buyItem, sellItem, buyTent, LOGS_PER_TREE } from './economy.js';
 
 const $ = s => document.querySelector(s);
 let options = { ...DEFAULT_OPTIONS };
@@ -9,10 +14,14 @@ const t = key => translate(key, options.language);
 let season = 0, mode = 'car', running = false, paused = false, elapsed = 0, money = 180000;
 let camp = null, clean = false, protectedCamp = false, danger = false, campCount = 0;
 let backpackOpen = false, optionsOpen = false, posture = 'stand', jumpHeight = 0, jumpVelocity = 0;
-let target = null, yaw = 0.65, pitch = 0.6, dist = 28, weather = 'clear', weatherTick = -1, lastEncounter = 0;
-const inventory = new Set(), visited = new Set(), keys = new Set();
+let target = null, yaw = 0.65, pitch = 0.6, dist = 20, weather = 'clear', weatherTick = -1, lastEncounter = 0;
+let inventory = new Map();
+const visited = new Set(), keys = new Set();
+let tentConfig = { ...DEFAULT_TENT_CONFIG }, tentDraft = { ...DEFAULT_TENT_CONFIG }, shopOpen = false, cameraMode = 'outdoor', actionAt = -1000, treeCount = 0;
+let contextAction = null, activeTool = null, lastHUD = 0, campfire = null;
+const harvested = new Set();
 const essentials = ['tent', 'bedding', 'clothing', 'cookware', 'food', 'survival'];
-const goods = [['tarp', 45000], ['mat', 25000], ['winterBag', 60000], ['repellent', 30000]];
+const goods = GOODS.filter(item => !['tent', 'firewood', 'stone', 'soil', 'water'].includes(item.id));
 const app = $('#app');
 app.innerHTML = `
 <div id="scene"></div>
@@ -33,16 +42,16 @@ app.innerHTML = `
 </main></div>
 <div id="hud" class="hud hidden"><div><div class="top"><div class="glass"><div class="brand">FREE CAMPER</div><div id="clock" class="clock"></div><div id="weather" class="small"></div><div id="pause-badge" class="pause-badge hidden" data-i18n="pausedBadge"></div></div><div class="glass"><div id="balance"></div><div id="status" class="small"></div><div class="row hud-buttons"><button id="pause" data-i18n="pause"></button><button id="game-options" data-i18n="options"></button></div></div></div>
 <div class="glass mission"><div data-i18n="missionTitle"></div><div id="missions" class="small"></div></div></div>
-<div class="bottom"><div><div class="actions"><button id="camp" class="primary" data-i18n="camp"></button><button id="clean" data-i18n="clean"></button><button id="protect" data-i18n="protect"></button><button id="repel" data-i18n="repel"></button><button id="backpack-toggle"><span data-i18n="backpack"></span> <kbd>B</kbd></button><button id="shop-toggle" data-i18n="shop"></button><button id="sleep" data-i18n="rest"></button><button id="return" data-i18n="return"></button></div><div class="small help" data-i18n="help"></div><div class="small" data-i18n="mouseHint"></div><div id="journal" class="small"></div></div>
-<div id="map" class="map" role="button" tabindex="0" aria-label="Map"><div class="mountain">▲▲▲</div><div class="lake"></div><div id="pin" class="pin">●</div><span data-i18n="coast"></span></div></div></div>
-<div id="shop" class="panel glass hidden"></div>
+<div class="bottom"><div><div class="actions"><button id="camp" class="primary" data-i18n="camp"></button><button id="clean" data-i18n="clean"></button><button id="protect" data-i18n="protect"></button><button id="repel" data-i18n="repel"></button><button id="backpack-toggle"><span data-i18n="backpack"></span> <kbd>B</kbd></button><button id="shop-toggle" data-i18n="shop"></button><button id="sleep" data-i18n="rest"></button><button id="return" data-i18n="return"></button></div><div class="context-action"><button id="interact" class="primary"><kbd>F</kbd> <span id="interaction-label"></span></button><span id="location-label"></span></div><div class="small help" data-i18n="help"></div><div class="small" data-i18n="mouseHint"></div><div id="journal" class="small"></div></div>
+<div id="map" class="map" role="button" tabindex="0" aria-label="Map"><div class="mountain">▲▲▲</div><div class="lake"></div><div id="shop-pin" class="map-icon">⌂</div><div id="summit-pin" class="map-icon">⚑</div><div id="camp-pin" class="map-icon hidden">⛺</div><div id="pin" class="pin">●</div><span data-i18n="coast"></span></div></div></div>
+<div id="shop-modal" class="modal hidden"><section class="dialog shop-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-heading"><header><div><div class="eyebrow">TRAIL OUTFITTER</div><h2 id="shop-heading" data-i18n="shopTitle"></h2></div><button id="shop-close" data-i18n="close"></button></header><div id="shop"></div></section></div>
 <div id="backpack-modal" class="modal hidden"><section class="dialog backpack-dialog" role="dialog" aria-modal="true" aria-labelledby="backpack-heading"><header><div><div class="eyebrow">A PLACE FOR EVERYTHING</div><h2 id="backpack-heading" data-i18n="backpackTitle"></h2></div><button id="backpack-close" data-i18n="close"></button></header><p class="pause-message" data-i18n="backpackNote"></p><div id="backpack-items" class="inventory-grid"></div><footer data-i18n="backpackClose"></footer></section></div>
 <div id="options-modal" class="modal hidden"><section class="dialog options-dialog" role="dialog" aria-modal="true" aria-labelledby="options-heading"><header><div><div class="eyebrow">MAKE YOURSELF COMFORTABLE</div><h2 id="options-heading" data-i18n="options"></h2></div><button id="options-close" data-i18n="close"></button></header><p class="small" data-i18n="optionsNote"></p>
 <label class="setting" for="brightness"><span data-i18n="brightness"></span><output id="brightness-value"></output><input id="brightness" type="range" min="60" max="150" step="5"></label>
 <label class="setting" for="sensitivity"><span data-i18n="sensitivity"></span><output id="sensitivity-value"></output><input id="sensitivity" type="range" min="0.2" max="3" step="0.1"></label>
 <label class="setting toggle" for="invert-x"><span data-i18n="invertX"></span><input id="invert-x" type="checkbox"></label><label class="setting toggle" for="invert-y"><span data-i18n="invertY"></span><input id="invert-y" type="checkbox"></label>
 <label class="setting language-setting" for="language"><span data-i18n="language"></span><select id="language"><option value="ko">한국어</option><option value="en">English</option></select></label>
-<h3 data-i18n="controls"></h3><div class="control-grid">${[['W A S D','move'],['Mouse','look'],['Space','jump'],['Left Shift','slow'],['C','crouch'],['V','prone'],['B','backpack']].map(([key,label]) => `<div><kbd>${key}</kbd><span data-i18n="${label}"></span></div>`).join('')}</div><p class="small" data-i18n="controlsNote"></p><div id="save-warning" class="small" role="status"></div></section></div>
+<h3 data-i18n="controls"></h3><div class="control-grid">${[['W A S D','move'],['Mouse','look'],['Space','jump'],['Left Shift','slow'],['C','crouch'],['V','prone'],['B','backpack'],['F','interact']].map(([key,label]) => `<div><kbd>${key}</kbd><span data-i18n="${label}"></span></div>`).join('')}</div><p class="small" data-i18n="controlsNote"></p><div id="save-warning" class="small" role="status"></div></section></div>
 <div id="toast" class="toast hidden" role="status"></div>`;
 
 const scene = new THREE.Scene();
@@ -55,49 +64,26 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 $('#scene').appendChild(renderer.domElement);
-const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 600);
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.08, 1800);
 const ambient = new THREE.HemisphereLight('#e5f1e8', '#3e5441', 2);
 scene.add(ambient);
 const sun = new THREE.DirectionalLight('#ffe1a0', 3);
 sun.position.set(-40, 60, -20); sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110 });
-scene.add(sun);
+scene.add(sun, sun.target);
 function mesh(geo, color, x, y, z, parent = scene) {
   const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.85 }));
   m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
 }
-const ground = mesh(new THREE.BoxGeometry(160, 3, 180), '#7c9364', -20, -1.7, 0);
-const sea = mesh(new THREE.PlaneGeometry(65, 180, 30, 30), '#639eaa', 92, -0.05, 0);
-sea.rotation.x = -Math.PI / 2; sea.material.roughness = 0.25; sea.material.metalness = 0.35;
-mesh(new THREE.BoxGeometry(12, 0.3, 180), '#d8cba0', 54, -0.1, 0);
-const lake = mesh(new THREE.CircleGeometry(18, 48), '#72adb3', -25, 0.05, 63);
-lake.rotation.x = -Math.PI / 2; lake.scale.y = 0.65;
-for (let i = 0; i < 16; i++) mesh(new THREE.CircleGeometry(5, 20), '#72adb3', -25 + Math.sin(i * 0.5) * 12, 0.08, 63 + i * 3).rotation.x = -Math.PI / 2;
+const world = createWorld(scene);
+const shopBuilding = createShop(scene, { x: SHOP.x, y: terrainHeight(SHOP.x, SHOP.z), z: SHOP.z });
 let seed = 82;
 const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
-const trees = [];
-for (let i = 0; i < 120; i++) {
-  const x = rand() * 140 - 95, z = rand() * 145 - 75;
-  if (Math.hypot(x + 10, z) < 15 || Math.hypot(x + 25, z - 63) < 22) continue;
-  const h = 4 + rand() * 5;
-  mesh(new THREE.CylinderGeometry(0.35, 0.55, h, 6), '#675c45', x, h / 2, z);
-  trees.push(mesh(new THREE.ConeGeometry(h * 0.55, h * 1.4, 7), '#3e7151', x, h * 1.1, z));
-}
-for (let i = 0; i < 12; i++) {
-  const h = 15 + rand() * 25, x = -95 + i * 14;
-  mesh(new THREE.ConeGeometry(15 + rand() * 12, h, 5), '#7c8b83', x, h / 2 - 1, -84);
-  mesh(new THREE.ConeGeometry(6, h * 0.32, 5), '#e4e8dc', x, h * 0.85, -84);
-}
-for (let i = 0; i < 35; i++) mesh(new THREE.DodecahedronGeometry(1 + rand() * 1.5), '#9a9e8a', rand() * 140 - 95, 0.4, rand() * 155 - 75);
-for (let i = 0; i < 28; i++) mesh(new THREE.CircleGeometry(3.2, 12), '#b8b18a', Math.sin(i * 0.25) * 9 - 10, 0.03, i * 5 - 70).rotation.x = -Math.PI / 2;
-mesh(new THREE.BoxGeometry(10, 5, 7), '#ab8260', -10, 2.5, -48);
-mesh(new THREE.ConeGeometry(8, 4, 4), '#5a665a', -10, 6.5, -48).rotation.y = Math.PI / 4;
-mesh(new THREE.BoxGeometry(2, 3, 0.2), '#3e5345', -10, 1.5, -44.4);
 
 function createCamper(parent) {
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body); parent.add(root);
-  const torso = mesh(new THREE.CylinderGeometry(0.5, 0.45, 1.2, 8), '#e6b168', 0, 1.5, 0, body);
+  const torso = mesh(new THREE.CylinderGeometry(0.5, 0.45, 1.2, 12), '#e6b168', 0, 1.5, 0, body);
   mesh(new THREE.SphereGeometry(0.38, 12, 8), '#dbb391', 0, 2.4, 0, body);
   mesh(new THREE.SphereGeometry(0.39, 12, 8), '#4a4037', 0, 2.55, 0.05, body).scale.y = 0.55;
   mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), '#526e62', 0, 1.5, 0.4, body);
@@ -106,11 +92,19 @@ function createCamper(parent) {
     mesh(new THREE.BoxGeometry(0.28, 0.9, 0.3), '#40574d', 0, -0.45, 0, pivot);
     return pivot;
   });
-  [-0.67, 0.67].forEach(x => mesh(new THREE.CapsuleGeometry(0.13, 0.65, 3, 6), '#d4a777', x, 1.45, 0, body));
+  [-0.67, 0.67].forEach(x => {
+    mesh(new THREE.CapsuleGeometry(0.15, 0.55, 4, 8), '#bb894e', x, 1.65, 0, body);
+    mesh(new THREE.SphereGeometry(0.15, 8, 6), '#d4a777', x, 1.12, 0, body);
+  });
+  [-0.23, 0.23].forEach(x => mesh(new THREE.BoxGeometry(0.34, 0.22, 0.55), '#473d32', x, 0.12, 0.13, body));
+  [-0.12, 0.12].forEach(x => mesh(new THREE.SphereGeometry(0.035, 6, 4), '#2a3230', x, 2.45, 0.35, body));
+  mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 16), '#a58b5b', 0, 2.65, 0, body);
+  mesh(new THREE.CylinderGeometry(0.57, 0.57, 0.04, 20), '#b79d6b', 0, 2.58, 0, body);
+  [-0.25, 0.25].forEach(x => mesh(new THREE.BoxGeometry(0.08, 0.9, 0.08), '#345546', x, 1.5, -0.42, body));
   return { root, body, torso, legs };
 }
 const camper = createCamper(scene), player = camper.root;
-player.position.set(-10, 0, 0);
+player.position.set(SHOP.x, terrainHeight(SHOP.x, -12), -12);
 function poseCamper(model, pose, walking = false, now = 0) {
   model.body.rotation.x = pose === 'prone' ? -Math.PI / 2 : pose === 'crouch' ? 0.24 : 0;
   model.body.position.set(0, pose === 'prone' ? 0.42 : pose === 'crouch' ? -0.62 : 0, 0);
@@ -153,15 +147,15 @@ for (let i = 0; i < 12; i++) {
   const b = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 6), new THREE.MeshStandardMaterial({ color: i < 6 ? '#b39c77' : '#82928d' }));
   b.scale.set(1, 0.8, 0.6); g.add(b);
   const head = b.clone(); head.scale.set(0.4, 0.6, 0.4); head.position.set(0.65, 0.4, 0); g.add(head);
-  g.position.set(rand() * 110 - 85, 0.8, rand() * 110 - 55); scene.add(g); animals.push(g);
+  const ax = rand() * 300 - 270, az = rand() * 320 - 150;
+  g.position.set(ax, terrainHeight(ax, az) + 0.8, az); scene.add(g); animals.push(g);
 }
 const count = 1400, positions = new Float32Array(count * 3);
-for (let i = 0; i < count; i++) { positions[i * 3] = rand() * 180 - 100; positions[i * 3 + 1] = rand() * 65; positions[i * 3 + 2] = rand() * 180 - 90; }
+for (let i = 0; i < count; i++) { positions[i * 3] = rand() * 160 - 80; positions[i * 3 + 1] = rand() * 65; positions[i * 3 + 2] = rand() * 160 - 80; }
 const particlesGeo = new THREE.BufferGeometry(); particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 const particles = new THREE.Points(particlesGeo, new THREE.PointsMaterial({ color: '#f6d9df', size: 0.28, transparent: true, opacity: 0.8 })); scene.add(particles);
 function applySeason() {
-  ground.material.color.set(['#82986c', '#67845c', '#a28b5b', '#dce3df'][season]);
-  trees.forEach((tree, i) => tree.material.color.set(['#668864', '#39745b', i % 3 ? '#b17e4c' : '#c59a57', '#718a7f'][season]));
+  world.updateSeason(season);
   particles.material.color.set(['#f6d4df', '#c0dce8', '#e4ad61', '#ffffff'][season]);
 } applySeason();
 
@@ -169,23 +163,24 @@ function toast(key) {
   $('#toast').textContent = t(key); $('#toast').classList.remove('hidden');
   clearTimeout(toast.timer); toast.timer = setTimeout(() => $('#toast').classList.add('hidden'), 4500);
 }
-function advancing() { return timeAdvances({ running, paused, backpackOpen, optionsOpen, hidden: document.hidden }); }
+function advancing() { return timeAdvances({ running, paused, backpackOpen, optionsOpen, hidden: document.hidden || shopOpen }); }
 function clearMovement() { keys.clear(); target = null; }
 function releaseMouse() { if (document.pointerLockElement) document.exitPointerLock(); }
 let modalTrigger = null;
 function openModal(kind) {
   modalTrigger = document.activeElement; clearMovement(); releaseMouse();
-  if (kind === 'options') { optionsOpen = true; syncOptions(); } else { backpackOpen = true; renderBackpack(); }
+  if (kind === 'options') { optionsOpen = true; syncOptions(); } else if (kind === 'shop') { shopOpen = true; renderShop(); } else { backpackOpen = true; renderBackpack(); }
   $(`#${kind}-modal`).classList.remove('hidden'); $(`#${kind}-close`).focus(); renderHUD();
 }
 function closeModal(kind) {
-  if (kind === 'options') optionsOpen = false; else backpackOpen = false;
+  if (kind === 'options') optionsOpen = false; else if (kind === 'shop') shopOpen = false; else backpackOpen = false;
   $(`#${kind}-modal`).classList.add('hidden'); clearMovement();
   if (modalTrigger?.isConnected) modalTrigger.focus(); renderHUD();
 }
 $('#title-options').onclick = $('#game-options').onclick = () => openModal('options');
 $('#options-close').onclick = () => closeModal('options');
 $('#backpack-close').onclick = () => closeModal('backpack');
+$('#shop-close').onclick = () => closeModal('shop');
 $('#backpack-toggle').onclick = () => { if (running && !optionsOpen) openModal('backpack'); };
 $('#start').onclick = () => { $('#title-screen').classList.add('hidden'); $('#home').classList.remove('hidden'); $('#age').focus(); };
 $('#prep-back').onclick = () => { $('#home').classList.add('hidden'); $('#title-screen').classList.remove('hidden'); $('#start').focus(); };
@@ -202,7 +197,7 @@ function localize() {
   document.querySelectorAll('[data-label]').forEach(el => el.setAttribute('aria-label', t(el.dataset.label)));
   $('#pause').textContent = t(paused ? 'resume' : 'pause');
   if ($('#home-error').textContent) $('#home-error').textContent = t('gearError');
-  if (!$('#shop').classList.contains('hidden')) renderShop();
+  if (shopOpen) renderShop();
   if (backpackOpen) renderBackpack();
   $('#toast').classList.add('hidden'); renderHUD();
 }
@@ -226,27 +221,27 @@ $('#travel').onclick = e => {
 $('#depart').onclick = () => {
   const checked = [...document.querySelectorAll('#gear input:checked')];
   if (checked.length !== 6) { $('#home-error').textContent = t('gearError'); return; }
-  checked.forEach(i => inventory.add(i.value));
+  checked.forEach(i => inventory.set(i.value, 1));
   camper.torso.scale.x = [1, 1.4, 0.75][$('#body').selectedIndex]; camper.torso.material.color.set($('#gender').value === 'female' ? '#cf947f' : '#e6b168');
-  elapsed = (mode === 'car' ? 1 : 3) * 120; running = true; clearMovement();
+  elapsed = (mode === 'car' ? 1 : 3) * 120; weatherTick = Math.floor(elapsed / 120); lastEncounter = weatherTick; weather = 'clear'; running = true; clearMovement();
   $('#home').classList.add('hidden'); $('#hud').classList.remove('hidden'); document.activeElement?.blur();
   toast('arrived'); renderHUD();
 };
 function hour() { return (5 + elapsed / 120) % 24; }
 function night() { return hour() < 6 || hour() >= 19; }
 function finish() {
-  running = false; clearMovement(); releaseMouse(); $('#shop').classList.add('hidden');
+  running = false; clearMovement(); releaseMouse(); $('#shop-modal').classList.add('hidden'); shopOpen = false;
   $('#hud').classList.add('hidden');
   const el = document.createElement('div'); el.className = 'end';
   el.innerHTML = `<div><div class="brand">UNTIL NEXT TIME</div><h1>${t('endTitle')}</h1><p>${Math.min(7, Math.floor(elapsed / 2880) + 1)} ${t('tripDays')} · ${campCount} ${t('camps')} · ${visited.size} ${t('views')}<br>${t('remaining')} ₩${money.toLocaleString()}</p><button id="again" class="primary">${t('again')}</button></div>`;
   app.appendChild(el); $('#again').onclick = () => location.reload(); $('#again').focus();
 }
 $('#return').onclick = () => { if (advancing()) finish(); };
-$('#pause').onclick = () => { if (backpackOpen || optionsOpen) return; paused = !paused; clearMovement(); if (paused) releaseMouse(); $('#pause').textContent = t(paused ? 'resume' : 'pause'); renderHUD(); };
+$('#pause').onclick = () => { if (backpackOpen || optionsOpen || shopOpen) return; paused = !paused; clearMovement(); if (paused) releaseMouse(); $('#pause').textContent = t(paused ? 'resume' : 'pause'); renderHUD(); };
 function setPosture(next) { if (jumpHeight > 0) return; posture = togglePosture(posture, next); poseCamper(camper, posture); renderHUD(); }
-const gameCodes = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'KeyC', 'KeyV', 'KeyB'];
+const gameCodes = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'KeyC', 'KeyV', 'KeyB', 'KeyF'];
 addEventListener('keydown', e => {
-  const modal = optionsOpen ? 'options' : backpackOpen ? 'backpack' : null;
+  const modal = optionsOpen ? 'options' : backpackOpen ? 'backpack' : shopOpen ? 'shop' : null;
   if (modal && e.code === 'Tab') {
     const nodes = [...$(`#${modal}-modal`).querySelectorAll('button, input, select, [tabindex="0"]')];
     const first = nodes[0], last = nodes.at(-1);
@@ -255,12 +250,13 @@ addEventListener('keydown', e => {
   }
   if (e.code === 'Escape') { if (modal) { e.preventDefault(); closeModal(modal); } else releaseMouse(); return; }
   const editing = e.target.matches('input, select, textarea, [contenteditable="true"]');
-  if (e.code === 'KeyB' && running && !optionsOpen && !editing && !e.repeat) {
+  if (e.code === 'KeyB' && running && !optionsOpen && !shopOpen && !editing && !e.repeat) {
     e.preventDefault(); if (backpackOpen) closeModal('backpack'); else openModal('backpack'); return;
   }
   if (!advancing() || editing || modal) return;
   if (gameCodes.includes(e.code)) e.preventDefault();
   keys.add(e.code);
+  if (!e.repeat && e.code === 'KeyF') interact();
   if (!e.repeat && e.code === 'KeyC') setPosture('crouch');
   if (!e.repeat && e.code === 'KeyV') setPosture('prone');
   if (!e.repeat && e.code === 'Space' && posture === 'stand' && jumpHeight === 0) { jumpVelocity = 7; jumpHeight = 0.001; renderHUD(); }
@@ -288,48 +284,179 @@ renderer.domElement.addEventListener('pointerup', () => { touchPosition = null; 
 renderer.domElement.addEventListener('pointercancel', () => { touchPosition = null; });
 renderer.domElement.addEventListener('wheel', e => { if (advancing()) dist = THREE.MathUtils.clamp(dist + e.deltaY * 0.025, 12, 60); });
 $('#map').onclick = e => {
-  if (!advancing()) return; const r = e.currentTarget.getBoundingClientRect();
-  target = new THREE.Vector3(THREE.MathUtils.clamp((e.clientX - r.left) / r.width * 220 - 100, -96, 48), 0, THREE.MathUtils.clamp((e.clientY - r.top) / r.height * 180 - 90, -70, 83));
+  if (!advancing() || cameraMode !== 'outdoor') return; const r = e.currentTarget.getBoundingClientRect();
+  target = new THREE.Vector3(THREE.MathUtils.clamp(WORLD.minX + (e.clientX - r.left) / r.width * (WORLD.maxX - WORLD.minX), WORLD.minX + 1, WORLD.landMaxX - 1), 0, THREE.MathUtils.clamp(WORLD.minZ + (e.clientY - r.top) / r.height * (WORLD.maxZ - WORLD.minZ), WORLD.minZ + 1, WORLD.maxZ - 1));
 };
-$('#camp').onclick = () => {
-  if (!advancing()) return;
-  if (player.position.z > 48 && Math.hypot(player.position.x + 25, player.position.z - 63) < 22) { toast('waterWarning'); return; }
-  if (camp) scene.remove(camp); camp = new THREE.Group();
-  mesh(new THREE.ConeGeometry(3, 3.2, 4), '#dcaa65', 0, 1.6, 0, camp).rotation.y = Math.PI / 4;
-  camp.position.set(player.position.x + 3, 0, player.position.z); scene.add(camp); clean = false; protectedCamp = false; campCount++; toast('campDone'); renderHUD();
-};
+$('#camp').onclick = placeCamp;
 $('#clean').onclick = () => { if (!advancing()) return; if (!camp) { toast('needCamp'); return; } clean = true; toast('cleanDone'); renderHUD(); };
 $('#protect').onclick = () => { if (!advancing()) return; if (!camp) { toast('needCamp'); return; } if (!inventory.has('repellent')) { toast('needRepellent'); return; } protectedCamp = true; toast('protectDone'); };
 $('#repel').onclick = () => { if (!advancing()) return; if (!danger) { toast('noAnimal'); return; } if (!inventory.has('repellent')) { toast('needRepellent'); return; } danger = false; toast('repelDone'); renderHUD(); };
 $('#sleep').onclick = () => { if (!advancing()) return; if (!camp) { toast('needCamp'); return; } elapsed += 120; toast('restDone'); renderHUD(); };
-function nearShop() { return Math.hypot(player.position.x + 10, player.position.z + 44) < 15; }
+function nearShop() { return cameraMode === 'shop' && flatDistance(shopBuilding.ownerPosition) < 5.6; }
+function flatDistance(point) { return Math.hypot(player.position.x - point.x, player.position.z - point.z); }
+function allColliders() { return [...world.colliders, ...shopBuilding.colliders(), ...(camp?.colliders() ?? [])]; }
+function currentFloor(x = player.position.x, z = player.position.z) {
+  if (shopBuilding.isInside(x, z)) return shopBuilding.floorY;
+  if (camp?.isInside(x, z)) return camp.floorY;
+  return terrainHeight(x, z);
+}
+function updateInterior() {
+  cameraMode = camp?.isInside(player.position.x, player.position.z) ? 'tent' : shopBuilding.isInside(player.position.x, player.position.z) ? 'shop' : 'outdoor';
+  shopBuilding.setInterior(cameraMode === 'shop'); camp?.setInterior(cameraMode === 'tent');
+  player.visible = cameraMode !== 'tent';
+}
+function updateContext() {
+  const candidates = [];
+  const add = (kind, point, range, label, object = null, priority = 0) => {
+    const d = flatDistance(point);
+    if (d <= range) candidates.push({ kind, point, label, object, score: d + priority });
+  };
+  add('shopDoor', shopBuilding.doorPosition, 3.5, shopBuilding.doorOpen ? 'closeDoor' : 'openDoor', shopBuilding, -1.2);
+  if (cameraMode === 'shop') {
+    add('owner', shopBuilding.ownerPosition, 5.6, 'tradeOwner', shopBuilding, -1);
+    for (const item of shopBuilding.interiorTargets ?? []) add('shelf', item.position, 2.8, 'inspectShelf', item);
+  } else if (cameraMode === 'tent') {
+    add('tentDoor', camp.doorPosition, 3.5, camp.doorOpen ? 'closeTent' : 'openTent', camp, -1);
+    for (const item of camp.interiorTargets) add(item.id === 'tent-bedding' ? 'bedding' : item.id === 'tent-backpack' ? 'backpack' : 'lantern', item.position, 3.5, item.id === 'tent-bedding' ? 'tentRest' : item.id === 'tent-backpack' ? 'openBackpack' : 'toggleLantern', item);
+  } else {
+    if (camp) add('tentDoor', camp.doorPosition, 3.5, camp.doorOpen ? 'closeTent' : 'openTent', camp, -0.7);
+    for (const tree of world.trees) if (!tree.felled) add('tree', tree, tree.radius + 2.6, 'chopTree', tree);
+    for (const rock of world.rocks) if (!harvested.has(rock.id)) add('rock', rock, rock.radius + 2, 'mineRock', rock);
+    for (const item of world.interactables ?? []) if (!item.collected) add(item.type === 'plant' ? 'plant' : item.type === 'water' ? 'water' : 'landmark', item.position ?? item, 3.5, item.type === 'plant' ? 'collectHerb' : item.type === 'water' ? 'fillWater' : 'inspect', item);
+    for (let i = 0; i < 8; i++) {
+      const p = { x: player.position.x + Math.cos(i * Math.PI / 4) * 3, z: player.position.z + Math.sin(i * Math.PI / 4) * 3 };
+      if (isWater(p.x, p.z)) { add('water', player.position, 1, 'fillWater'); break; }
+    }
+    for (const animal of animals) if (animal.visible) add('animal', animal.position, 3.5, 'observeAnimal', animal);
+    if (campfire) add('fire', campfire.position, 3, campfire.userData.lit ? 'putOutFire' : 'lightFire', campfire);
+  }
+  candidates.sort((a, b) => a.score - b.score);
+  contextAction = candidates[0] ?? { kind: 'ground', label: inventory.has('shovel') ? 'digGround' : 'inspectGround' };
+  $('#interaction-label').textContent = t(contextAction.label) + (contextAction.kind === 'tree' ? ` (${contextAction.object.hits}/3)` : '');
+}
+function addInventory(id, count = 1) { inventory.set(id, (inventory.get(id) ?? 0) + count); }
+function interact() {
+  if (!advancing()) return;
+  updateContext(); const action = contextAction;
+  if (performance.now() - actionAt < 400) return;
+  actionAt = performance.now();
+  if (action.kind === 'shopDoor' || action.kind === 'tentDoor') {
+    const structure = action.object;
+    if (structure.doorOpen && flatDistance(structure.doorPosition ?? action.point) < 1.4) { toast('clearDoor'); return; }
+    structure.setDoor(!structure.doorOpen); toast(structure.doorOpen ? 'doorOpened' : 'doorClosed');
+  } else if (action.kind === 'owner') {
+    openModal('shop');
+  } else if (action.kind === 'tree') {
+    if (!inventory.has('axe')) { toast('needAxe'); return; }
+    activeTool = 'axe'; world.chopTree(action.object);
+    if (action.object.felled) { addInventory('firewood', LOGS_PER_TREE); treeCount++; toast('woodCollected'); }
+    else toast('treeHit');
+  } else if (action.kind === 'rock') {
+    if (!inventory.has('pickaxe')) { toast('needPickaxe'); return; }
+    activeTool = 'pickaxe';
+    action.object.hits = (action.object.hits ?? 0) + 1;
+    if (action.object.hits >= 3) {
+      harvested.add(action.object.id); action.object.object.visible = false;
+      for (const c of world.colliders) if (c.id === action.object.id || (c.x === action.object.x && c.z === action.object.z)) c.active = false;
+      addInventory('stone', 3); toast('stoneCollected');
+    } else toast('rockHit');
+  } else if (action.kind === 'plant') { action.object.collected = true; action.object.object.visible = false; addInventory('herbs'); toast('herbCollected');
+  } else if (action.kind === 'water') { addInventory('water'); toast('waterCollected');
+  } else if (action.kind === 'backpack') { openModal('backpack');
+  } else if (action.kind === 'lantern') { camp.group.traverse(object => { if (object.isPointLight) { object.userData.originalIntensity ??= object.intensity; object.intensity = object.intensity ? 0 : object.userData.originalIntensity; } }); toast('lanternToggled');
+  } else if (action.kind === 'bedding') { $('#sleep').click();
+  } else if (action.kind === 'shelf') { toast('shelfHint');
+  } else if (action.kind === 'animal') { toast('animalObserved');
+  } else if (action.kind === 'fire') {
+    if (campfire.userData.lit) campfire.userData.lit = false;
+    else if ((inventory.get('firewood') ?? 0) > 0) { addInventory('firewood', -1); if (!inventory.get('firewood')) inventory.delete('firewood'); campfire.userData.lit = true; }
+    else { toast('needFirewood'); return; }
+    toast(campfire.userData.lit ? 'fireLit' : 'fireOut');
+  } else if (action.kind === 'ground' && inventory.has('shovel')) {
+    activeTool = 'shovel'; addInventory('soil'); toast('soilCollected');
+  } else toast('sceneryInfo');
+  updateContext(); renderHUD();
+}
+$('#interact').onclick = interact;
+function placeCamp() {
+  if (!advancing()) return;
+  if (cameraMode !== 'outdoor') { toast('campOutdoors'); return; }
+  const scale = { standard: 1, large: 1.25, family: 1.5 }[tentConfig.size];
+  const halfW = 9 * scale, halfD = 8 * scale;
+  const location = findCampLocation(player.position, tentConfig, [...world.colliders, ...shopBuilding.colliders()]);
+  if (!location) { toast('needFlatCamp'); return; }
+  camp?.dispose();
+  if (campfire) { scene.remove(campfire); campfire.traverse(o => { o.geometry?.dispose(); if (o.material) o.material.dispose(); }); }
+  camp = createTent(scene, tentConfig, location); campCount++; clean = false; protectedCamp = false;
+  campfire = new THREE.Group(); campfire.position.set(location.x + halfW + 2.5, terrainHeight(location.x + halfW + 2.5, location.z), location.z); scene.add(campfire);
+  for (let i = 0; i < 9; i++) mesh(new THREE.DodecahedronGeometry(0.3), '#737970', Math.cos(i / 9 * Math.PI * 2) * 0.9, 0.15, Math.sin(i / 9 * Math.PI * 2) * 0.9, campfire);
+  const flame = mesh(new THREE.ConeGeometry(0.4, 1, 8), '#f1ad53', 0, 0.6, 0, campfire);
+  flame.material.emissive.set('#ef6e25'); flame.visible = false; campfire.userData.flame = flame; campfire.userData.lit = false;
+  const light = new THREE.PointLight('#ffb65a', 0, 16); light.position.y = 1; campfire.add(light); campfire.userData.light = light;
+  const outside = { x: camp.entrance.x, z: camp.entrance.z + 2.1 };
+  if (camp.isInside(player.position.x, player.position.z)) { player.position.x = outside.x; player.position.z = outside.z; }
+  player.position.y = currentFloor(); target = null; toast('campDone'); updateInterior(); updateContext(); renderHUD();
+}
+function readTentSelection() { return Object.fromEntries(Object.keys(TENT_CHOICES).map(key => [key, $(`#tent-${key}`).value])); }
 function renderShop() {
-  const near = nearShop();
-  $('#shop').innerHTML = `<h3>${t('shopTitle')}</h3><p class="small">${t(near ? 'welcomeShop' : 'farShop')}<br>${t('usedNote')}</p>` + goods.map(([n, p], i) => `<div class="item"><div>${t(n)}<div class="small">₩${p.toLocaleString()}</div></div><div>${inventory.has(n) ? `<button data-sell="${i}" ${near ? '' : 'disabled'}>${t('sell')}</button>` : `<button data-buy="${i}" ${near ? '' : 'disabled'}>${t('new')}</button> <button data-used="${i}" ${near ? '' : 'disabled'}>${t('used')}</button>`}</div></div>`).join('');
+  const balance = `<div class="shop-welcome"><strong>${t('ownerName')}</strong><span>${t('ownerGreeting')}</span><b>₩ ${money.toLocaleString()}</b></div>`;
+  $('#shop').innerHTML = balance + `<h3>${t('tentCustom')}</h3><div class="tent-config">${Object.entries(TENT_CHOICES).map(([key, values]) => `<label>${t('tent' + key[0].toUpperCase() + key.slice(1))}<select id="tent-${key}">${values.map(value => `<option value="${value}" ${tentDraft[key] === value ? 'selected' : ''}>${t(({ standard: 'tentStandard', large: 'tentLarge', family: 'tentFamily' })[value] ?? value)}</option>`).join('')}</select></label>`).join('')}</div><div class="tent-purchase"><div id="tent-swatch"></div><span id="tent-price"></span><button id="buy-tent" class="primary">${t('buyTent')}</button></div><p class="small">${t('tentHint')}</p><h3>${t('toolsAndGear')}</h3>` +
+    goods.map(({ id, price }) => `<div class="item"><div>${t(id)} <span class="small">×${inventory.get(id) ?? 0}</span><div class="small">₩${price.toLocaleString()}</div></div><div><button data-buy="${id}">${t('new')}</button> <button data-used="${id}">${t('used')}</button> <button data-sell="${id}" ${inventory.has(id) ? '' : 'disabled'}>${t('sell')}</button></div></div>`).join('') +
+    `<div class="item"><div>${t('firewood')} ×${inventory.get('firewood') ?? 0}<div class="small">₩1,200 / ${t('each')}</div></div><button data-sell="firewood" ${inventory.has('firewood') ? '' : 'disabled'}>${t('sell')}</button></div><p class="small">${t('usedNote')}</p>`;
+  updateTentPreview();
 }
-$('#shop-toggle').onclick = () => { if (!advancing()) return; clearMovement(); releaseMouse(); $('#shop').classList.toggle('hidden'); renderShop(); };
-$('#shop').onclick = e => {
-  if (!advancing() || !nearShop()) return; const b = e.target;
-  if (b.dataset.sell !== undefined) { const [n, p] = goods[+b.dataset.sell]; inventory.delete(n); money += Math.floor(p * 0.4); if (n === 'repellent') protectedCamp = false; }
-  else { const idx = b.dataset.buy ?? b.dataset.used; if (idx === undefined) return; const [n, p] = goods[+idx], price = b.dataset.used !== undefined ? Math.floor(p * 0.65) : p; if (money < price) { toast('noMoney'); return; } money -= price; inventory.add(n); }
-  renderShop(); renderHUD();
+function updateTentPreview() {
+  const config = readTentSelection();
+  $('#tent-price').textContent = `₩ ${tentPrice(config).toLocaleString()}`;
+  $('#tent-swatch').style.backgroundColor = { sand: '#d3b481', forest: '#58705a', rust: '#be7049', navy: '#485e78' }[config.color];
+  $('#tent-swatch').classList.toggle('ripstop', config.material === 'ripstop');
+}
+$('#shop').oninput = () => { tentDraft = readTentSelection(); updateTentPreview(); };
+$('#shop-toggle').onclick = () => {
+  if (!advancing()) return;
+  if (!nearShop()) { toast('findOwner'); return; }
+  openModal('shop');
 };
-const icons = { tent: '⛺', bedding: '▤', clothing: '♧', cookware: '♨', food: '◒', survival: '✚', tarp: '⌂', mat: '▥', winterBag: '▰', repellent: '☀' };
+$('#shop').onclick = e => {
+  if (!shopOpen || !nearShop()) return;
+  const b = e.target.closest('button'); if (!b) return;
+  let result;
+  if (b.id === 'buy-tent') result = buyTent(money, inventory, readTentSelection());
+  else if (b.dataset.sell) result = sellItem(money, inventory, b.dataset.sell);
+  else if (b.dataset.buy || b.dataset.used) result = buyItem(money, inventory, b.dataset.buy ?? b.dataset.used, !!b.dataset.used);
+  else return;
+  if (!result.ok) { toast('noMoney'); return; }
+  money = result.money; inventory = result.inventory;
+  if (result.tentConfig) { tentConfig = result.tentConfig; tentDraft = { ...tentConfig }; }
+  if (!inventory.has('repellent')) protectedCamp = false;
+  renderShop(); renderHUD(); toast(result.tentConfig ? 'tentPurchased' : 'tradeDone');
+};
+const icons = { tent: '⛺', bedding: '▤', clothing: '♧', cookware: '♨', food: '◒', survival: '✚', tarp: '⌂', mat: '▥', winterBag: '▰', repellent: '☀', axe: '⚒', shovel: '♠', pickaxe: '⚒', rope: '∞', firewood: '▰', stone: '◆', soil: '▥', water: '◉' };
 function renderBackpack() {
-  $('#backpack-items').innerHTML = inventory.size ? [...inventory].map(id => `<article class="inventory-card"><div class="item-icon" aria-hidden="true">${icons[id]}</div><div><h3>${t(id)}</h3><span class="small">${t(essentials.includes(id) ? 'essential' : 'extra')}</span></div><span class="item-quantity">×1</span></article>`).join('') : `<p>${t('empty')}</p>`;
+  $('#backpack-items').innerHTML = inventory.size ? [...inventory].filter(([, count]) => count > 0).map(([id, count]) => `<article class="inventory-card"><div class="item-icon" aria-hidden="true">${icons[id] ?? '◇'}</div><div><h3>${t(id)}</h3><span class="small">${id === 'tent' ? `${t(({ standard: 'tentStandard', large: 'tentLarge', family: 'tentFamily' })[tentConfig.size])} · ${t(tentConfig.type)} · ${t(tentConfig.material)}` : t(essentials.includes(id) ? 'essential' : 'extra')}</span></div><span class="item-quantity">×${count}</span></article>`).join('') : `<p>${t('empty')}</p>`;
 }
+
 function renderHUD() {
   if (!running) return;
   $('#clock').textContent = `DAY ${Math.floor(elapsed / 2880) + 1} / 7 · ${String(Math.floor(hour())).padStart(2, '0')}:${String(Math.floor(hour() % 1 * 60)).padStart(2, '0')}`;
   $('#weather').textContent = `${t(seasonKeys[season])} · ${t(weather)} · ${t(night() ? 'night' : 'day')}`;
   $('#balance').textContent = `₩ ${money.toLocaleString()}`;
   const state = jumpHeight > 0 ? 'airborne' : posture === 'crouch' ? 'crouched' : posture === 'prone' ? 'proneState' : 'stand';
-  $('#status').textContent = `${t(mode)} · ${t(danger ? 'danger' : 'safe')} · ${t(state)}`;
-  $('#missions').innerHTML = `${camp ? '✓' : '○'} ${t('campGoal')}<br>${clean ? '✓' : '○'} ${t('cleanGoal')}<br>${visited.size >= 3 ? '✓' : '○'} ${t('exploreGoal')} (${visited.size}/3)`;
+  $('#status').textContent = `${t(danger ? 'danger' : 'safe')} · ${t(state)} · ${t(cameraMode === 'tent' ? 'firstPerson' : cameraMode === 'shop' ? 'shoulderView' : 'outdoorView')}`;
+  $('#missions').innerHTML = `${camp ? '✓' : '○'} ${t('campGoal')}<br>${treeCount ? '✓' : '○'} ${t('treeGoal')}<br>${visited.has('summit') ? '✓' : '○'} ${t('summitGoal')}`;
   $('#journal').textContent = t(season === 3 && !inventory.has('winterBag') ? 'winterTip' : weather === 'rain' && !inventory.has('tarp') ? 'rainTip' : 'peacefulTip');
-  $('#pin').style.left = `${(player.position.x + 100) / 220 * 100}%`; $('#pin').style.top = `${(player.position.z + 90) / 180 * 100}%`;
+  const pinAt = (element, x, z) => { element.style.left = `${(x - WORLD.minX) / (WORLD.maxX - WORLD.minX) * 100}%`; element.style.top = `${(z - WORLD.minZ) / (WORLD.maxZ - WORLD.minZ) * 100}%`; };
+  pinAt($('#pin'), player.position.x, player.position.z); pinAt($('#shop-pin'), SHOP.x, SHOP.z); pinAt($('#summit-pin'), SUMMIT.x, SUMMIT.z);
+  $('#camp-pin').classList.toggle('hidden', !camp);
+  if (camp) pinAt($('#camp-pin'), camp.group.position.x, camp.group.position.z);
+  const area = Math.hypot(player.position.x - SUMMIT.x, player.position.z - SUMMIT.z) < SUMMIT.radius ? 'summit' : player.position.z > 130 ? 'lakeside' : player.position.x > 80 ? 'seaside' : 'woodland';
+  $('#location-label').textContent = `${t(area)} · ${t('altitude')} ${Math.round(currentFloor())} m`;
   $('#pause-badge').classList.toggle('hidden', advancing());
+  updateContext();
 }
+const heldTool = new THREE.Group(); camper.body.add(heldTool); heldTool.position.set(-0.76, 1.05, 0.08); heldTool.visible = false;
+mesh(new THREE.CylinderGeometry(0.045, 0.055, 1.0, 7), '#805f3a', 0, 0.35, 0, heldTool);
+const toolHead = mesh(new THREE.BoxGeometry(0.42, 0.32, 0.09), '#abb2ae', 0.15, 0.8, 0, heldTool);
 function stepGame(dt, now, realSeconds) {
   elapsed += realSeconds;
   if (elapsed >= 7 * 24 * 120) { finish(); return; }
@@ -340,47 +467,86 @@ function stepGame(dt, now, realSeconds) {
   if (keys.has('KeyD') || keys.has('ArrowRight')) dx++;
   const dir = new THREE.Vector3(dx, 0, dz);
   if (dir.length()) { target = null; dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw); }
-  else if (target) { dir.copy(target).sub(player.position); dir.y = 0; if (dir.length() < 0.5) { target = null; dir.set(0, 0, 0); } else dir.normalize(); }
-  player.position.addScaledVector(dir, movementSpeed(mode, posture, keys.has('ShiftLeft')) * dt);
-  player.position.x = THREE.MathUtils.clamp(player.position.x, -96, 48); player.position.z = THREE.MathUtils.clamp(player.position.z, -70, 83);
-  if (jumpHeight > 0 || jumpVelocity > 0) { ({ height: jumpHeight, velocity: jumpVelocity } = verticalStep(jumpHeight, jumpVelocity, dt)); }
-  player.position.y = jumpHeight;
+  else if (target) { dir.copy(target).sub(player.position); dir.y = 0; if (dir.length() < 0.7) { target = null; dir.set(0, 0, 0); } else dir.normalize(); }
+  const speed = movementSpeed(cameraMode === 'outdoor' ? mode : 'walk', posture, keys.has('ShiftLeft'));
+  const before = { x: player.position.x, z: player.position.z };
+  const moved = resolveMovement(before, { x: dir.x * speed * dt, z: dir.z * speed * dt }, allColliders());
+  player.position.x = moved.x; player.position.z = moved.z;
+  if (target && Math.hypot(moved.x - before.x, moved.z - before.z) < 0.001 && dir.length()) target = null;
+  if (jumpHeight > 0 || jumpVelocity > 0) ({ height: jumpHeight, velocity: jumpVelocity } = verticalStep(jumpHeight, jumpVelocity, dt));
+  updateInterior(); player.position.y = currentFloor() + jumpHeight;
   if (dir.length()) player.rotation.y = Math.atan2(dir.x, dir.z);
+  else if (cameraMode !== 'outdoor') player.rotation.y = yaw + Math.PI;
   poseCamper(camper, posture, dir.length() > 0, now);
-  visited.add(player.position.z < -30 ? 'mountain' : player.position.z > 35 ? 'lake' : player.position.x > 25 ? 'coast' : 'forest');
+  heldTool.visible = !!activeTool && inventory.has(activeTool);
+  heldTool.rotation.z = now - actionAt < 350 ? Math.sin((now - actionAt) / 350 * Math.PI) * 1.7 : -0.15;
+  toolHead.scale.set(activeTool === 'pickaxe' ? 1.8 : 1, activeTool === 'shovel' ? 1.6 : 1, 1);
+  visited.add(player.position.z < -110 ? 'mountain' : player.position.z > 130 ? 'lake' : player.position.x > 80 ? 'coast' : 'forest');
+  if (Math.hypot(player.position.x - SUMMIT.x, player.position.z - SUMMIT.z) < SUMMIT.radius) visited.add('summit');
   const tick = Math.floor(elapsed / 120);
   if (tick !== weatherTick) {
     weatherTick = tick; weather = ['clear', ['blossoms', 'rain', 'leaves', 'snow'][season], 'fog'][Math.floor(Math.random() * 3)];
-    if (tick > lastEncounter) { lastEncounter = tick; if (!danger && Math.random() < (night() ? (clean && protectedCamp ? 0.005 : 0.25) : 0.05)) { danger = true; toast('animalWarning'); } }
+    if (tick > lastEncounter) { lastEncounter = tick; if (!danger && cameraMode === 'outdoor' && Math.random() < (night() ? (clean && protectedCamp ? 0.005 : 0.25) : 0.05)) { danger = true; toast('animalWarning'); } }
   }
-  if (danger && player.position.z < -35) { danger = false; toast('safeZone'); }
-  particles.visible = weather !== 'clear' && weather !== 'fog'; particles.material.size = weather === 'rain' ? 0.13 : season === 3 ? 0.22 : 0.32;
+  if (danger && cameraMode !== 'outdoor') { danger = false; toast('safeZone'); }
+  particles.visible = cameraMode === 'outdoor' && weather !== 'clear' && weather !== 'fog';
+  particles.position.set(player.position.x, currentFloor(), player.position.z);
+  particles.material.size = weather === 'rain' ? 0.14 : season === 3 ? 0.23 : 0.3;
   const a = particlesGeo.attributes.position.array;
   for (let i = 0; i < count; i++) { a[i * 3 + 1] -= dt * (weather === 'rain' ? 25 : 2); a[i * 3] += dt * Math.sin(now * 0.0003 + i) * 1.5; if (a[i * 3 + 1] < 0) a[i * 3 + 1] = 65; }
   particlesGeo.attributes.position.needsUpdate = true;
-  animals.forEach((g, i) => { g.visible = i < 6 ? !night() : night(); g.position.x += Math.sin(now * 0.0002 + i) * dt * 0.5; });
-  sea.position.y = -0.05 + Math.sin(elapsed * 0.6) * 0.07;
-  if (!$('#shop').classList.contains('hidden') && renderShop.wasNear !== nearShop()) { renderShop.wasNear = nearShop(); renderShop(); }
-  renderHUD();
+  animals.forEach((g, i) => {
+    g.visible = i < 6 ? !night() : night();
+    const nextX = g.position.x + Math.sin(now * 0.0002 + i) * dt * 0.5;
+    if (!isWater(nextX, g.position.z)) g.position.x = nextX;
+    g.position.y = terrainHeight(g.position.x, g.position.z) + 0.8;
+  });
+  world.animate(dt, elapsed, player.position); shopBuilding.update(dt);
+  if (campfire) {
+    campfire.userData.flame.visible = campfire.userData.lit;
+    campfire.userData.flame.scale.setScalar(0.9 + Math.sin(now * 0.015) * 0.1);
+    campfire.userData.light.intensity = campfire.userData.lit ? 6 + Math.sin(now * 0.013) : 0;
+  }
+  if (now - lastHUD > 100) { renderHUD(); lastHUD = now; }
 }
 let previous = performance.now();
 function animate(now) {
   requestAnimationFrame(animate);
-  const realSeconds = (now - previous) / 1000;
+  const realSeconds = Math.max(0, (now - previous) / 1000);
   const dt = Math.min(realSeconds, 0.1); previous = now;
   if (advancing()) stepGame(dt, now, realSeconds);
   if (!running) { renderer.render(titleScene, titleCamera); return; }
-  const daylight = THREE.MathUtils.clamp(Math.sin((hour() - 6) / 12 * Math.PI), 0.05, 1);
-  ambient.intensity = 0.35 + daylight * 1.5; sun.intensity = daylight * 2.8;
-  sun.position.set(Math.cos(hour() / 24 * Math.PI * 2) * 60, Math.max(6, daylight * 65), -35);
-  const sky = new THREE.Color().lerpColors(new THREE.Color('#152a42'), new THREE.Color('#b9d1cf'), daylight);
-  scene.background.copy(sky); scene.fog.color.copy(sky); scene.fog.density = weather === 'fog' ? 0.022 : 0.006;
-  const eye = posture === 'prone' ? 0.6 : posture === 'crouch' ? 0.9 : 1.5;
-  camera.position.set(player.position.x + Math.sin(yaw) * dist * Math.cos(pitch), player.position.y + eye + Math.sin(pitch) * dist, player.position.z + Math.cos(yaw) * dist * Math.cos(pitch));
-  camera.lookAt(player.position.x, player.position.y + eye, player.position.z);
+  const daylight = THREE.MathUtils.clamp(Math.sin((hour() - 5) / 14 * Math.PI), 0.10, 1);
+  ambient.intensity = 0.85 + daylight * 1.65; sun.intensity = daylight * 2.8;
+  sun.target.position.copy(player.position);
+  sun.position.set(player.position.x + Math.cos(hour() / 24 * Math.PI * 2) * 80, player.position.y + Math.max(16, daylight * 110), player.position.z - 45);
+  const sky = new THREE.Color().lerpColors(new THREE.Color('#21364b'), new THREE.Color('#b9d1cf'), daylight);
+  if (hour() >= 5 && hour() < 8) sky.lerp(new THREE.Color('#edc5a1'), 0.4);
+  scene.background.copy(sky); scene.fog.color.copy(sky); scene.fog.density = cameraMode !== 'outdoor' ? 0.0005 : weather === 'fog' ? 0.006 : 0.0016;
+  const eye = posture === 'prone' ? 0.6 : posture === 'crouch' ? 1.1 : 2.1;
+  if (cameraMode === 'tent') {
+    camera.position.set(player.position.x, player.position.y + eye, player.position.z);
+    camera.lookAt(player.position.x - Math.sin(yaw) * 10, player.position.y + eye - Math.sin(pitch - 0.6) * 10, player.position.z - Math.cos(yaw) * 10);
+  } else if (cameraMode === 'shop') {
+    const b = shopBuilding.bounds, back = 2.7;
+    camera.position.set(THREE.MathUtils.clamp(player.position.x + Math.sin(yaw) * back + Math.cos(yaw) * 0.8, b.minX + 0.7, b.maxX - 0.7), player.position.y + 2.6 + Math.sin(pitch - 0.6), THREE.MathUtils.clamp(player.position.z + Math.cos(yaw) * back - Math.sin(yaw) * 0.8, b.minZ + 0.7, b.maxZ - 0.7));
+    const safeCamera = resolveMovement(player.position, { x: camera.position.x - player.position.x, z: camera.position.z - player.position.z }, shopBuilding.colliders(), 0.22);
+    camera.position.x = safeCamera.x; camera.position.z = safeCamera.z;
+    camera.lookAt(player.position.x - Math.sin(yaw) * 5, player.position.y + 1.8 - Math.sin(pitch - 0.6) * 5, player.position.z - Math.cos(yaw) * 5);
+  } else {
+    camera.position.set(player.position.x + Math.sin(yaw) * dist * Math.cos(pitch), player.position.y + eye + Math.sin(pitch) * dist, player.position.z + Math.cos(yaw) * dist * Math.cos(pitch));
+    camera.position.y = Math.max(camera.position.y, terrainHeight(camera.position.x, camera.position.z) + 1);
+    camera.lookAt(player.position.x, player.position.y + 1.8, player.position.z);
+  }
   renderer.render(scene, camera);
 }
 addEventListener('resize', () => {
   [camera, titleCamera].forEach(c => { c.aspect = innerWidth / innerHeight; c.updateProjectionMatrix(); }); renderer.setSize(innerWidth, innerHeight);
 });
 syncOptions(); localize(); requestAnimationFrame(animate);
+if (import.meta.env.DEV) {
+  window.__camper = {
+    snapshot: () => ({ running, paused, cameraMode, elapsed, money, inventory: Object.fromEntries(inventory), player: player.position.toArray(), yaw, pitch, tentConfig: { ...tentConfig }, treeCount, shopDoor: shopBuilding.doorOpen, context: contextAction?.kind, trees: world.trees.map(({ id, x, z, hits, felled }) => ({ id, x, z, hits, felled })), camp: camp ? { position: camp.group.position.toArray(), entrance: camp.entrance.toArray(), inside: camp.insidePosition.toArray(), doorOpen: camp.doorOpen, bounds: camp.bounds } : null }),
+    teleport(x, z, facing = 0) { if (!Number.isFinite(x) || !Number.isFinite(z)) return; player.position.set(x, terrainHeight(x, z), z); yaw = facing; jumpHeight = 0; jumpVelocity = 0; clearMovement(); updateInterior(); player.position.y = currentFloor(); renderHUD(); },
+  };
+}
