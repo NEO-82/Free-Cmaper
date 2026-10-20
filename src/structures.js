@@ -16,7 +16,7 @@ export function normalizeTentConfig(config = {}) {
 }
 export function tentDimensions(config = DEFAULT_TENT) {
   const scale = SIZE_SCALE[normalizeTentConfig(config).size];
-  return { width: 18 * scale, depth: 16 * scale, height: 7 * scale, scale };
+  return { width: 9 * scale, depth: 8 * scale, height: 3.5 * scale, scale };
 }
 
 function canvasTexture(kind, color = '#ffffff') {
@@ -313,7 +313,7 @@ function endPanel(parent, width, depth, roofY, mat, front, doorWidth = 0, doorHe
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); geo.setIndex(indices); geo.computeVertexNormals(); return add(parent, geo, mat);
 }
 
-/** Standard tent is 18×16×7m, three times the previous six-metre width. */
+/** Standard tent is 9×8×3.5m with a full-height walk-through entrance. */
 export function createTent(scene, requestedConfig = DEFAULT_TENT, position = {}) {
   const config = normalizeTentConfig(requestedConfig), dims = tentDimensions(config), { width: w, depth: d, height: h, scale: s } = dims;
   const origin = { x: 0, y: 0, z: 0, rotation: 0, ...position };
@@ -328,7 +328,7 @@ export function createTent(scene, requestedConfig = DEFAULT_TENT, position = {})
   const edgeY = roofY(w / 2);
   box(shell, .05, edgeY, d, fabric, -w / 2, edgeY / 2, 0);
   box(shell, .05, edgeY, d, fabric, w / 2, edgeY / 2, 0);
-  const doorW = 3.4 * s, doorH = 3.6 * s;
+  const doorW = 2.4 * s, doorH = 2.9 * s;
   endPanel(shell, w, d / 2, x => roofY(x, d / 2), fabric, true, doorW, doorH);
   endPanel(shell, w, -d / 2, x => roofY(x, -d / 2), fabric, false);
   // Continuous bent poles and raised stitched seams follow the fabric silhouette.

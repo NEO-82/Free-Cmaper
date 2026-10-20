@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { DEFAULT_OPTIONS, normalizeOptions, lookAngles, movementSpeed, togglePosture, verticalStep, timeAdvances } from './controls.js';
 import { translate, seasonKeys } from './i18n.js';
-import { WORLD, SHOP, SUMMIT, LAKE, terrainHeight, isWater, resolveMovement } from './terrain.js';
+import { WORLD, SHOP, SUMMIT, LAKE, COAST_START, terrainHeight, isWater, resolveMovement } from './terrain.js';
+import { sampleWeather } from './weather.js';
+import { createScenery } from './scenery.js';
+import { createMarine } from './marine.js';
+import { createAudio } from './audio.js';
 import { createWorld } from './world.js';
 import { createAtmosphere, weatherTextures } from './atmosphere.js';
 import { createCamper, poseCamper } from './characters.js';
@@ -22,7 +26,11 @@ let target = null, yaw = 0, pitch = 0.32, dist = 9.5, weather = 'clear', weather
 let inventory = new Map();
 const visited = new Set(), keys = new Set();
 let tentConfig = { ...DEFAULT_TENT_CONFIG }, tentDraft = { ...DEFAULT_TENT_CONFIG }, shopOpen = false, cameraMode = 'outdoor', actionAt = -1000, treeCount = 0;
-let contextAction = null, activeTool = null, lastHUD = 0, campfire = null;
+let contextAction = null, activeTool = null, lastHUD = 0;
+let threatSpawned = false, sceneDirty = true, simulationSeconds = 0;
+let diveDepth = 0, selectedItem = 0, lastFootstep = 0, pauseChangedAt = -1000;
+let weatherProfile = sampleWeather(season);
+const audio = createAudio();
 const harvested = new Set();
 const essentials = ['tent', 'bedding', 'clothing', 'cookware', 'food', 'survival'];
 const goods = GOODS.filter(item => !['tent', 'firewood', 'stone', 'soil', 'water'].includes(item.id));
@@ -44,18 +52,20 @@ app.innerHTML = `
   <h3 data-i18n="transport"></h3><div id="travel" class="row"><button class="active" data-mode="car" aria-pressed="true" data-i18n="carChoice"></button><button data-mode="walk" aria-pressed="false" data-i18n="walkChoice"></button></div>
   <p class="note"><span data-i18n="timeNote"></span><br><span data-i18n="gearNote"></span></p><button id="depart" class="primary depart" data-i18n="depart"></button><div id="home-error" class="note" role="alert"></div>
 </main></div>
-<div id="hud" class="hud hidden"><div><div class="top"><div class="glass"><div class="brand">FREE CAMPER</div><div id="clock" class="clock"></div><div id="weather" class="small"></div><div id="pause-badge" class="pause-badge hidden" data-i18n="pausedBadge"></div></div><div class="glass"><div id="balance"></div><div id="status" class="small"></div><div class="row hud-buttons"><button id="pause" data-i18n="pause"></button><button id="game-options" data-i18n="options"></button></div></div></div>
+<div id="hud" class="hud hidden"><div><div class="top"><div class="glass"><div class="brand">FREE CAMPER</div><div id="clock" class="clock"></div><div id="weather" class="small"></div><div id="pause-badge" class="pause-badge hidden" data-i18n="pausedBadge"></div></div><div class="glass"><div id="balance"></div><div id="status" class="small"></div></div></div>
 <div class="glass mission"><div data-i18n="missionTitle"></div><div id="missions" class="small"></div></div></div>
-<div class="bottom"><div><div class="actions"><button id="camp" class="primary" data-i18n="camp"></button><button id="clean" data-i18n="clean"></button><button id="protect" data-i18n="protect"></button><button id="repel" data-i18n="repel"></button><button id="backpack-toggle"><span data-i18n="backpack"></span> <kbd>B</kbd></button><button id="shop-toggle" data-i18n="shop"></button><button id="sleep" data-i18n="rest"></button><button id="return" data-i18n="return"></button></div><div class="context-action"><button id="interact" class="primary"><kbd>F</kbd> <span id="interaction-label"></span></button><span id="location-label"></span></div><div class="small help" data-i18n="help"></div><div class="small" data-i18n="mouseHint"></div><div id="journal" class="small"></div></div>
-<div id="map" class="map" role="button" tabindex="0" aria-label="Map"><div class="mountain">▲▲▲</div><div class="lake"></div><div id="shop-pin" class="map-icon">⌂</div><div id="summit-pin" class="map-icon">⚑</div><div id="camp-pin" class="map-icon hidden">⛺</div><div id="pin" class="pin">●</div><span data-i18n="coast"></span></div></div></div>
+<div class="bottom"><div><div class="context-action"><div id="interact" class="interaction-hint"><kbd>F</kbd> <span id="interaction-label"></span></div><span id="location-label"></span></div><div class="small help" data-i18n="menuHint"></div><div id="journal" class="small"></div></div>
+<div id="map" class="map" role="img" aria-label="Map"><div class="mountain">▲▲▲</div><div class="lake"></div><div id="shop-pin" class="map-icon">⌂</div><div id="summit-pin" class="map-icon">⚑</div><div id="camp-pin" class="map-icon hidden">⛺</div><div id="pin" class="pin">●</div><span data-i18n="coast"></span></div></div></div>
+<div id="pause-menu" class="modal hidden"><section class="dialog pause-dialog" role="dialog" aria-modal="true" aria-labelledby="pause-title"><header><div><div class="eyebrow">A MOMENT TO YOURSELF</div><h2 id="pause-title" data-i18n="pauseTitle"></h2></div><button id="pause" class="primary" data-i18n="resume"></button></header><p data-i18n="pauseNote"></p><div class="actions"><button id="camp" class="primary" data-i18n="camp"></button><button id="clean" data-i18n="clean"></button><button id="protect" data-i18n="protect"></button><button id="repel" data-i18n="repel"></button><button id="backpack-toggle"><span data-i18n="backpack"></span> <kbd>B</kbd></button><button id="shop-toggle" data-i18n="shop"></button><button id="sleep" data-i18n="rest"></button><button id="return" data-i18n="return"></button></div><button id="game-options" data-i18n="options"></button><p class="small" data-i18n="controlsNote"></p></section></div>
 <div id="shop-modal" class="modal hidden"><section class="dialog shop-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-heading"><header><div><div class="eyebrow">TRAIL OUTFITTER</div><h2 id="shop-heading" data-i18n="shopTitle"></h2></div><button id="shop-close" data-i18n="close"></button></header><div id="shop"></div></section></div>
-<div id="backpack-modal" class="modal hidden"><section class="dialog backpack-dialog" role="dialog" aria-modal="true" aria-labelledby="backpack-heading"><header><div><div class="eyebrow">A PLACE FOR EVERYTHING</div><h2 id="backpack-heading" data-i18n="backpackTitle"></h2></div><button id="backpack-close" data-i18n="close"></button></header><p class="pause-message" data-i18n="backpackNote"></p><div id="backpack-items" class="inventory-grid"></div><footer data-i18n="backpackClose"></footer></section></div>
+<div id="backpack-modal" class="backpack-bubble hidden"><section class="backpack-dialog" role="dialog" aria-labelledby="backpack-heading"><header><div><div class="eyebrow">MY LITTLE BACKPACK</div><h2 id="backpack-heading" data-i18n="backpackTitle"></h2></div><button id="backpack-close" data-i18n="close"></button></header><p class="small" data-i18n="backpackNote"></p><div id="backpack-items" class="inventory-grid"></div><footer data-i18n="backpackClose"></footer><p class="small" data-i18n="bagHint"></p></section></div>
 <div id="options-modal" class="modal hidden"><section class="dialog options-dialog" role="dialog" aria-modal="true" aria-labelledby="options-heading"><header><div><div class="eyebrow">MAKE YOURSELF COMFORTABLE</div><h2 id="options-heading" data-i18n="options"></h2></div><button id="options-close" data-i18n="close"></button></header><p class="small" data-i18n="optionsNote"></p>
 <label class="setting" for="brightness"><span data-i18n="brightness"></span><output id="brightness-value"></output><input id="brightness" type="range" min="60" max="150" step="5"></label>
 <label class="setting" for="sensitivity"><span data-i18n="sensitivity"></span><output id="sensitivity-value"></output><input id="sensitivity" type="range" min="0.2" max="3" step="0.1"></label>
+<label class="setting" for="music-volume"><span data-i18n="musicVolume"></span><output id="music-value"></output><input id="music-volume" type="range" min="0" max="100" step="5"></label><label class="setting" for="sfx-volume"><span data-i18n="sfxVolume"></span><output id="sfx-value"></output><input id="sfx-volume" type="range" min="0" max="100" step="5"></label><label class="setting toggle" for="muted"><span data-i18n="muted"></span><input id="muted" type="checkbox"></label>
 <label class="setting toggle" for="invert-x"><span data-i18n="invertX"></span><input id="invert-x" type="checkbox"></label><label class="setting toggle" for="invert-y"><span data-i18n="invertY"></span><input id="invert-y" type="checkbox"></label>
 <label class="setting language-setting" for="language"><span data-i18n="language"></span><select id="language"><option value="ko">한국어</option><option value="en">English</option></select></label>
-<h3 data-i18n="controls"></h3><div class="control-grid">${[['W A S D','move'],['Mouse','look'],['Space','jump'],['Left Shift','slow'],['C','crouch'],['V','prone'],['B','backpack'],['F','interact']].map(([key,label]) => `<div><kbd>${key}</kbd><span data-i18n="${label}"></span></div>`).join('')}</div><p class="small" data-i18n="controlsNote"></p><div id="save-warning" class="small" role="status"></div></section></div>
+<h3 data-i18n="controls"></h3><div class="control-grid">${[['W A S D','move'],['Mouse','look'],['Space','jump'],['Left Shift','run'],['Left Ctrl','sneak'],['C','crouch'],['V','prone'],['B','backpack'],['F','interact'],['Q / Space','dive'],['ESC','pause']].map(([key,label]) => `<div><kbd>${key}</kbd><span data-i18n="${label}"></span></div>`).join('')}</div><p class="small" data-i18n="controlsNote"></p><div id="save-warning" class="small" role="status"></div></section></div>
 <div id="toast" class="toast hidden" role="status"></div>`;
 
 const scene = new THREE.Scene();
@@ -68,7 +78,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.NeutralToneMapping;
 $('#scene').appendChild(renderer.domElement);
-const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.08, 1800);
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.08, 9000);
 const ambient = new THREE.HemisphereLight('#d7edff', '#7d9564', 2);
 scene.add(ambient);
 const sun = new THREE.DirectionalLight('#fff0d0', 3);
@@ -82,6 +92,8 @@ function mesh(geo, color, x, y, z, parent = scene) {
   m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
 }
 const world = createWorld(scene);
+const scenery = createScenery(scene);
+const marine = createMarine(scene);
 const atmosphere = createAtmosphere(scene);
 const shopBuilding = createShop(scene, { x: SHOP.x, y: terrainHeight(SHOP.x, SHOP.z), z: SHOP.z });
 let seed = 82;
@@ -137,46 +149,67 @@ function toast(key) {
 function advancing() { return timeAdvances({ running, paused, backpackOpen, optionsOpen, hidden: document.hidden || shopOpen }); }
 function clearMovement() { keys.clear(); target = null; }
 function releaseMouse() { if (document.pointerLockElement) document.exitPointerLock(); }
-let modalTrigger = null;
+function syncMenus() {
+  $('#pause-menu').classList.toggle('hidden', !running || !paused || optionsOpen || shopOpen || backpackOpen);
+  $('#backpack-modal').classList.toggle('selectable', paused);
+  document.body.classList.toggle('in-menu', paused);
+}
+function setPaused(value) {
+  paused = value; pauseChangedAt = performance.now(); clearMovement();
+  if (paused) releaseMouse();
+  else { ['options','shop','backpack'].forEach(kind => { $(`#${kind}-modal`).classList.add('hidden'); }); optionsOpen = shopOpen = backpackOpen = false; document.activeElement?.blur(); }
+  audio.effect(value ? 'open' : 'close'); syncMenus(); renderHUD();
+}
 function openModal(kind) {
-  modalTrigger = document.activeElement; clearMovement(); releaseMouse();
-  if (kind === 'options') { optionsOpen = true; syncOptions(); } else if (kind === 'shop') { shopOpen = true; renderShop(); } else { backpackOpen = true; renderBackpack(); }
-  $(`#${kind}-modal`).classList.remove('hidden'); $(`#${kind}-close`).focus(); renderHUD();
+  clearMovement();
+  if (kind === 'shop' && running) paused = true;
+  if (kind === 'options') { optionsOpen = true; syncOptions(); }
+  else if (kind === 'shop') { shopOpen = true; renderShop(); }
+  else { backpackOpen = true; selectedItem = 0; renderBackpack(); }
+  releaseMouse(); audio.effect('open');
+  $(`#${kind}-modal`).classList.remove('hidden'); syncMenus();
+  if (kind !== 'backpack' || paused) $(`#${kind}-close`).focus(); else document.activeElement?.blur();
+  renderHUD();
 }
 function closeModal(kind) {
   if (kind === 'options') optionsOpen = false; else if (kind === 'shop') shopOpen = false; else backpackOpen = false;
-  $(`#${kind}-modal`).classList.add('hidden'); clearMovement();
-  if (modalTrigger?.isConnected) modalTrigger.focus(); renderHUD();
+  $(`#${kind}-modal`).classList.add('hidden'); clearMovement(); audio.effect('close');
+  document.activeElement?.blur(); syncMenus(); renderHUD();
 }
+const canAct = () => running && !optionsOpen && !shopOpen && !backpackOpen;
 $('#title-options').onclick = $('#game-options').onclick = () => openModal('options');
 $('#options-close').onclick = () => closeModal('options');
 $('#backpack-close').onclick = () => closeModal('backpack');
 $('#shop-close').onclick = () => closeModal('shop');
 $('#backpack-toggle').onclick = () => { if (running && !optionsOpen) openModal('backpack'); };
-$('#start').onclick = () => { $('#title-screen').classList.add('hidden'); $('#home').classList.remove('hidden'); $('#age').focus(); };
+$('#start').onclick = () => { audio.unlock(); $('#title-screen').classList.add('hidden'); $('#home').classList.remove('hidden'); $('#age').focus(); };
 $('#prep-back').onclick = () => { $('#home').classList.add('hidden'); $('#title-screen').classList.remove('hidden'); $('#start').focus(); };
 function syncOptions() {
+  sceneDirty = true;
   $('#brightness').value = options.brightness; $('#brightness-value').value = `${options.brightness}%`;
   $('#sensitivity').value = options.sensitivity; $('#sensitivity-value').value = `${options.sensitivity.toFixed(1)}×`;
   $('#invert-x').checked = options.invertX; $('#invert-y').checked = options.invertY; $('#language').value = options.language;
   renderer.toneMappingExposure = options.brightness / 100;
+  $('#music-volume').value = options.musicVolume * 100; $('#music-value').value = `${Math.round(options.musicVolume*100)}%`;
+  $('#sfx-volume').value = options.sfxVolume * 100; $('#sfx-value').value = `${Math.round(options.sfxVolume*100)}%`; $('#muted').checked = options.muted; audio.setOptions(options);
 }
 function localize() {
   document.documentElement.lang = options.language;
   document.title = `Free Camper · ${t('subtitle')}`;
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-label]').forEach(el => el.setAttribute('aria-label', t(el.dataset.label)));
-  $('#pause').textContent = t(paused ? 'resume' : 'pause');
+  $('#pause').textContent = t('resume');
   if ($('#home-error').textContent) $('#home-error').textContent = t('gearError');
   if (shopOpen) renderShop();
   if (backpackOpen) renderBackpack();
   $('#toast').classList.add('hidden'); renderHUD();
 }
 $('#options-modal').addEventListener('input', e => {
-  const ids = { brightness: 'brightness', sensitivity: 'sensitivity', 'invert-x': 'invertX', 'invert-y': 'invertY', language: 'language' };
+  const ids = { brightness: 'brightness', sensitivity: 'sensitivity', 'invert-x': 'invertX', 'invert-y': 'invertY', language: 'language', 'music-volume': 'musicVolume', 'sfx-volume': 'sfxVolume', muted: 'muted' };
   const key = ids[e.target.id]; if (!key) return;
   options[key] = e.target.type === 'checkbox' ? e.target.checked : e.target.type === 'range' ? +e.target.value : e.target.value;
-  options = normalizeOptions(options); syncOptions();
+  if (key === 'musicVolume' || key === 'sfxVolume') options[key] /= 100;
+  options = normalizeOptions(options); syncOptions(); audio.effect('item');
   if (key === 'language') localize();
   try { localStorage.setItem('free-camper-options', JSON.stringify(options)); $('#save-warning').textContent = ''; }
   catch { $('#save-warning').textContent = t('saveUnavailable'); }
@@ -194,7 +227,7 @@ $('#depart').onclick = () => {
   if (checked.length !== 6) { $('#home-error').textContent = t('gearError'); return; }
   checked.forEach(i => inventory.set(i.value, 1));
   camper.configure({ age: $('#age').value, gender: $('#gender').value, bodyType: $('#body').value });
-  elapsed = (mode === 'car' ? 1 : 3) * 120; weatherTick = Math.floor(elapsed / 120); lastEncounter = weatherTick; weather = 'clear'; running = true; clearMovement();
+  elapsed = (mode === 'car' ? 1 : 3) * 120; weatherTick = Math.floor(elapsed / 120); lastEncounter = weatherTick; weatherProfile = sampleWeather(season); weather = weatherProfile.kind; running = true; audio.unlock(); clearMovement();
   $('#home').classList.add('hidden'); $('#hud').classList.remove('hidden'); document.activeElement?.blur();
   player.rotation.y = yaw + Math.PI; toast('arrived'); renderHUD();
 };
@@ -202,15 +235,19 @@ function hour() { return (5 + elapsed / 120) % 24; }
 function night() { return hour() < 6 || hour() >= 19; }
 function finish() {
   running = false; clearMovement(); releaseMouse(); $('#shop-modal').classList.add('hidden'); shopOpen = false;
-  $('#hud').classList.add('hidden');
+  $('#hud').classList.add('hidden'); $('#pause-menu').classList.add('hidden'); $('#backpack-modal').classList.add('hidden'); $('#options-modal').classList.add('hidden'); backpackOpen = optionsOpen = false; paused = false; syncMenus(); audio.setMode('calm');
   const el = document.createElement('div'); el.className = 'end';
   el.innerHTML = `<div><div class="brand">UNTIL NEXT TIME</div><h1>${t('endTitle')}</h1><p>${Math.min(7, Math.floor(elapsed / 2880) + 1)} ${t('tripDays')} · ${campCount} ${t('camps')} · ${visited.size} ${t('views')}<br>${t('remaining')} ₩${money.toLocaleString()}</p><button id="again" class="primary">${t('again')}</button></div>`;
   app.appendChild(el); $('#again').onclick = () => location.reload(); $('#again').focus();
 }
-$('#return').onclick = () => { if (advancing()) finish(); };
-$('#pause').onclick = () => { if (backpackOpen || optionsOpen || shopOpen) return; paused = !paused; clearMovement(); if (paused) releaseMouse(); $('#pause').textContent = t(paused ? 'resume' : 'pause'); renderHUD(); };
+$('#return').onclick = () => { if (canAct()) finish(); };
+$('#pause').onclick = () => setPaused(false);
+function displayPosture(moving = ['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].some(key=>keys.has(key))) {
+  if (posture !== 'stand') return posture;
+  return keys.has('ControlLeft') ? 'sneak' : keys.has('ShiftLeft') && moving ? 'run' : 'stand';
+}
 function setPosture(next) { if (jumpHeight > 0) return; posture = togglePosture(posture, next); poseCamper(camper, posture); renderHUD(); }
-const gameCodes = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'KeyC', 'KeyV', 'KeyB', 'KeyF'];
+const gameCodes = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'KeyC', 'KeyV', 'KeyB', 'KeyF', 'KeyQ', 'ControlLeft', 'ControlRight'];
 addEventListener('keydown', e => {
   const modal = optionsOpen ? 'options' : backpackOpen ? 'backpack' : shopOpen ? 'shop' : null;
   if (modal && e.code === 'Tab') {
@@ -219,7 +256,15 @@ addEventListener('keydown', e => {
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
-  if (e.code === 'Escape') { if (modal) { e.preventDefault(); closeModal(modal); } else releaseMouse(); return; }
+  if (e.code === 'Escape' && !e.repeat) {
+    e.preventDefault(); if (!running) { if (modal) closeModal(modal); return; }
+    if (modal) { closeModal(modal); if (!paused) setPaused(true); }
+    else if (performance.now() - pauseChangedAt > 160) setPaused(!paused);
+    return;
+  }
+  if (backpackOpen && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)) {
+    e.preventDefault(); const count = inventory.size; selectedItem = (selectedItem + (['ArrowLeft','ArrowUp'].includes(e.code) ? -1 : 1) + count) % Math.max(1,count); audio.effect('item'); renderBackpack(); return;
+  }
   const editing = e.target.matches('input, select, textarea, [contenteditable="true"]');
   if (e.code === 'KeyB' && running && !optionsOpen && !shopOpen && !editing && !e.repeat) {
     e.preventDefault(); if (backpackOpen) closeModal('backpack'); else openModal('backpack'); return;
@@ -230,12 +275,12 @@ addEventListener('keydown', e => {
   if (!e.repeat && e.code === 'KeyF') interact();
   if (!e.repeat && e.code === 'KeyC') setPosture('crouch');
   if (!e.repeat && e.code === 'KeyV') setPosture('prone');
-  if (!e.repeat && e.code === 'Space' && posture === 'stand' && jumpHeight === 0) { jumpVelocity = 7; jumpHeight = 0.001; renderHUD(); }
+  if (!e.repeat && e.code === 'Space' && !inWater() && posture === 'stand' && jumpHeight === 0) { jumpVelocity = 7; jumpHeight = 0.001; audio.effect('jump'); renderHUD(); }
 });
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', clearMovement);
 document.addEventListener('visibilitychange', () => { previous = performance.now(); clearMovement(); renderHUD(); });
-document.addEventListener('pointerlockchange', () => { clearMovement(); });
+document.addEventListener('pointerlockchange', () => { clearMovement(); if (!document.pointerLockElement && running && !paused && !backpackOpen && !optionsOpen && !shopOpen) setPaused(true); });
 function look(dx, dy) { if (advancing()) ({ yaw, pitch } = lookAngles(yaw, pitch, dx, dy, options)); }
 document.addEventListener('mousemove', e => { if (document.pointerLockElement === renderer.domElement) look(e.movementX, e.movementY); });
 let touchPosition = null, mouseDragging = false;
@@ -255,18 +300,16 @@ renderer.domElement.addEventListener('pointermove', e => {
 renderer.domElement.addEventListener('pointerup', () => { touchPosition = null; mouseDragging = false; });
 renderer.domElement.addEventListener('pointercancel', () => { touchPosition = null; mouseDragging = false; });
 renderer.domElement.addEventListener('wheel', e => { if (advancing()) dist = THREE.MathUtils.clamp(dist + e.deltaY * 0.025, 4.5, 45); });
-$('#map').onclick = e => {
-  if (!advancing() || cameraMode !== 'outdoor') return; const r = e.currentTarget.getBoundingClientRect();
-  target = new THREE.Vector3(THREE.MathUtils.clamp(WORLD.minX + (e.clientX - r.left) / r.width * (WORLD.maxX - WORLD.minX), WORLD.minX + 1, WORLD.landMaxX - 1), 0, THREE.MathUtils.clamp(WORLD.minZ + (e.clientY - r.top) / r.height * (WORLD.maxZ - WORLD.minZ), WORLD.minZ + 1, WORLD.maxZ - 1));
-};
 $('#camp').onclick = placeCamp;
-$('#clean').onclick = () => { if (!advancing()) return; if (!camp) { toast('needCamp'); return; } clean = true; toast('cleanDone'); renderHUD(); };
-$('#protect').onclick = () => { if (!advancing()) return; if (!camp) { toast('needCamp'); return; } if (!inventory.has('repellent')) { toast('needRepellent'); return; } protectedCamp = true; toast('protectDone'); };
-$('#repel').onclick = () => { if (!advancing()) return; if (!danger) { toast('noAnimal'); return; } if (!inventory.has('repellent')) { toast('needRepellent'); return; } danger = false; toast('repelDone'); renderHUD(); };
-$('#sleep').onclick = () => { if (!advancing()) return; if (!camp) { toast('needCamp'); return; } elapsed += 120; toast('restDone'); renderHUD(); };
+$('#clean').onclick = () => { if (!canAct()) return; if (!camp) { toast('needCamp'); return; } clean = true; toast('cleanDone'); renderHUD(); };
+$('#protect').onclick = () => { if (!canAct()) return; if (!camp) { toast('needCamp'); return; } if (!inventory.has('repellent')) { toast('needRepellent'); return; } protectedCamp = true; toast('protectDone'); };
+$('#repel').onclick = () => { if (!canAct()) return; if (!danger) { toast('noAnimal'); return; } if (!inventory.has('repellent')) { toast('needRepellent'); return; } danger = false; audio.effect('repel'); audio.setMode('calm'); toast('repelDone'); renderHUD(); };
+$('#sleep').onclick = () => { if (!canAct()) return; if (!camp) { toast('needCamp'); return; } elapsed += 120; toast('restDone'); renderHUD(); };
 function nearShop() { return cameraMode === 'shop' && flatDistance(shopBuilding.ownerPosition) < 5.6; }
 function flatDistance(point) { return Math.hypot(player.position.x - point.x, player.position.z - point.z); }
 function allColliders() { return [...world.colliders, ...shopBuilding.colliders(), ...(camp?.colliders() ?? [])]; }
+function inWater() { const {x,z}=player.position; return cameraMode === 'outdoor' && (isWater(x,z) || x>COAST_START) && terrainHeight(x,z)<-.25; }
+function playerBaseY() { return inWater() ? Math.max(currentFloor(), -.95 - diveDepth) : currentFloor(); }
 function currentFloor(x = player.position.x, z = player.position.z) {
   if (shopBuilding.isInside(x, z)) return shopBuilding.floorY;
   if (camp?.isInside(x, z)) return camp.floorY;
@@ -275,7 +318,8 @@ function currentFloor(x = player.position.x, z = player.position.z) {
 function updateInterior() {
   cameraMode = camp?.isInside(player.position.x, player.position.z) ? 'tent' : shopBuilding.isInside(player.position.x, player.position.z) ? 'shop' : 'outdoor';
   shopBuilding.setInterior(cameraMode === 'shop'); camp?.setInterior(cameraMode === 'tent');
-  player.visible = cameraMode !== 'tent';
+  if (camp) { camp.shell.visible = !(backpackOpen && cameraMode === 'tent'); camp.doorPivot.visible = camp.shell.visible; }
+  player.visible = cameraMode !== 'tent' && !(inWater() && diveDepth > 1.1);
 }
 function updateContext() {
   const candidates = [];
@@ -300,13 +344,14 @@ function updateContext() {
       if (isWater(p.x, p.z)) { add('water', player.position, 1, 'fillWater'); break; }
     }
     for (const animal of animals) if (animal.visible) add('animal', animal.position, 3.5, 'observeAnimal', animal);
-    if (campfire) add('fire', campfire.position, 3, campfire.userData.lit ? 'putOutFire' : 'lightFire', campfire);
+    for (const animal of marine.creatures) add('marine', animal.position, 5, 'observeMarine', animal, -3);
+    for (const coral of marine.sites) add('marine', coral.position, 4.5, 'observeMarine', coral, -2);
   }
   candidates.sort((a, b) => a.score - b.score);
   contextAction = candidates[0] ?? { kind: 'ground', label: inventory.has('shovel') ? 'digGround' : 'inspectGround' };
   $('#interaction-label').textContent = t(contextAction.label) + (contextAction.kind === 'tree' ? ` (${contextAction.object.hits}/3)` : '');
 }
-function addInventory(id, count = 1) { inventory.set(id, (inventory.get(id) ?? 0) + count); }
+function addInventory(id, count = 1) { if (count > 0) audio.effect('collect'); inventory.set(id, (inventory.get(id) ?? 0) + count); }
 function interact() {
   if (!advancing()) return;
   updateContext(); const action = contextAction;
@@ -315,17 +360,17 @@ function interact() {
   if (action.kind === 'shopDoor' || action.kind === 'tentDoor') {
     const structure = action.object;
     if (structure.doorOpen && flatDistance(structure.doorPosition ?? action.point) < 1.4) { toast('clearDoor'); return; }
-    structure.setDoor(!structure.doorOpen); toast(structure.doorOpen ? 'doorOpened' : 'doorClosed');
+    audio.effect('door'); structure.setDoor(!structure.doorOpen); toast(structure.doorOpen ? 'doorOpened' : 'doorClosed');
   } else if (action.kind === 'owner') {
     openModal('shop');
   } else if (action.kind === 'tree') {
     if (!inventory.has('axe')) { toast('needAxe'); return; }
-    activeTool = 'axe'; world.chopTree(action.object);
+    audio.effect('chop'); activeTool = 'axe'; world.chopTree(action.object);
     if (action.object.felled) { addInventory('firewood', LOGS_PER_TREE); treeCount++; toast('woodCollected'); }
     else toast('treeHit');
   } else if (action.kind === 'rock') {
     if (!inventory.has('pickaxe')) { toast('needPickaxe'); return; }
-    activeTool = 'pickaxe';
+    audio.effect('mine'); activeTool = 'pickaxe';
     action.object.hits = (action.object.hits ?? 0) + 1;
     if (action.object.hits >= 3) {
       harvested.add(action.object.id); action.object.object.visible = false;
@@ -333,38 +378,26 @@ function interact() {
       addInventory('stone', 3); toast('stoneCollected');
     } else toast('rockHit');
   } else if (action.kind === 'plant') { action.object.collected = true; action.object.object.visible = false; addInventory('herbs'); toast('herbCollected');
-  } else if (action.kind === 'water') { addInventory('water'); toast('waterCollected');
+  } else if (action.kind === 'water') { audio.effect('splash'); addInventory('water'); toast('waterCollected');
   } else if (action.kind === 'backpack') { openModal('backpack');
   } else if (action.kind === 'lantern') { camp.group.traverse(object => { if (object.isPointLight) { object.userData.originalIntensity ??= object.intensity; object.intensity = object.intensity ? 0 : object.userData.originalIntensity; } }); toast('lanternToggled');
   } else if (action.kind === 'bedding') { $('#sleep').click();
   } else if (action.kind === 'shelf') { toast('shelfHint');
   } else if (action.kind === 'animal') { toast('animalObserved');
-  } else if (action.kind === 'fire') {
-    if (campfire.userData.lit) campfire.userData.lit = false;
-    else if ((inventory.get('firewood') ?? 0) > 0) { addInventory('firewood', -1); if (!inventory.get('firewood')) inventory.delete('firewood'); campfire.userData.lit = true; }
-    else { toast('needFirewood'); return; }
-    toast(campfire.userData.lit ? 'fireLit' : 'fireOut');
+  } else if (action.kind === 'marine') { audio.effect('item'); toast('marineObserved');
   } else if (action.kind === 'ground' && inventory.has('shovel')) {
-    activeTool = 'shovel'; addInventory('soil'); toast('soilCollected');
+    audio.effect('dig'); activeTool = 'shovel'; addInventory('soil'); toast('soilCollected');
   } else toast('sceneryInfo');
   updateContext(); renderHUD();
 }
-$('#interact').onclick = interact;
+
 function placeCamp() {
-  if (!advancing()) return;
+  if (!canAct()) return;
   if (cameraMode !== 'outdoor') { toast('campOutdoors'); return; }
-  const scale = { standard: 1, large: 1.25, family: 1.5 }[tentConfig.size];
-  const halfW = 9 * scale, halfD = 8 * scale;
   const location = findCampLocation(player.position, tentConfig, [...world.colliders, ...shopBuilding.colliders()]);
   if (!location) { toast('needFlatCamp'); return; }
   camp?.dispose();
-  if (campfire) { scene.remove(campfire); campfire.traverse(o => { o.geometry?.dispose(); if (o.material) o.material.dispose(); }); }
-  camp = createTent(scene, tentConfig, location); campCount++; clean = false; protectedCamp = false;
-  campfire = new THREE.Group(); campfire.position.set(location.x + halfW + 2.5, terrainHeight(location.x + halfW + 2.5, location.z), location.z); scene.add(campfire);
-  for (let i = 0; i < 9; i++) mesh(new THREE.DodecahedronGeometry(0.3), '#737970', Math.cos(i / 9 * Math.PI * 2) * 0.9, 0.15, Math.sin(i / 9 * Math.PI * 2) * 0.9, campfire);
-  const flame = mesh(new THREE.ConeGeometry(0.4, 1, 8), '#f1ad53', 0, 0.6, 0, campfire);
-  flame.material.emissive.set('#ef6e25'); flame.visible = false; campfire.userData.flame = flame; campfire.userData.lit = false;
-  const light = new THREE.PointLight('#ffb65a', 0, 16); light.position.y = 1; campfire.add(light); campfire.userData.light = light;
+  camp = createTent(scene, tentConfig, location); campCount++; clean = false; protectedCamp = false; audio.effect('collect');
   const outside = { x: camp.entrance.x, z: camp.entrance.z + 2.1 };
   if (camp.isInside(player.position.x, player.position.z)) { player.position.x = outside.x; player.position.z = outside.z; }
   player.position.y = currentFloor(); target = null; toast('campDone'); updateInterior(); updateContext(); renderHUD();
@@ -385,7 +418,7 @@ function updateTentPreview() {
 }
 $('#shop').oninput = () => { tentDraft = readTentSelection(); updateTentPreview(); };
 $('#shop-toggle').onclick = () => {
-  if (!advancing()) return;
+  if (!canAct()) return;
   if (!nearShop()) { toast('findOwner'); return; }
   openModal('shop');
 };
@@ -398,22 +431,28 @@ $('#shop').onclick = e => {
   else if (b.dataset.buy || b.dataset.used) result = buyItem(money, inventory, b.dataset.buy ?? b.dataset.used, !!b.dataset.used);
   else return;
   if (!result.ok) { toast('noMoney'); return; }
-  money = result.money; inventory = result.inventory;
+  audio.effect('item'); money = result.money; inventory = result.inventory;
   if (result.tentConfig) { tentConfig = result.tentConfig; tentDraft = { ...tentConfig }; }
   if (!inventory.has('repellent')) protectedCamp = false;
   renderShop(); renderHUD(); toast(result.tentConfig ? 'tentPurchased' : 'tradeDone');
 };
 const icons = { tent: '⛺', bedding: '▤', clothing: '♧', cookware: '♨', food: '◒', survival: '✚', tarp: '⌂', mat: '▥', winterBag: '▰', repellent: '☀', axe: '⚒', shovel: '♠', pickaxe: '⚒', rope: '∞', firewood: '▰', stone: '◆', soil: '▥', water: '◉' };
 function renderBackpack() {
-  $('#backpack-items').innerHTML = inventory.size ? [...inventory].filter(([, count]) => count > 0).map(([id, count]) => `<article class="inventory-card"><div class="item-icon" aria-hidden="true">${icons[id] ?? '◇'}</div><div><h3>${t(id)}</h3><span class="small">${id === 'tent' ? `${t(({ standard: 'tentStandard', large: 'tentLarge', family: 'tentFamily' })[tentConfig.size])} · ${t(tentConfig.type)} · ${t(tentConfig.material)}` : t(essentials.includes(id) ? 'essential' : 'extra')}</span></div><span class="item-quantity">×${count}</span></article>`).join('') : `<p>${t('empty')}</p>`;
+  $('#backpack-items').innerHTML = inventory.size ? [...inventory].filter(([, count]) => count > 0).map(([id, count],i) => `<button class="inventory-card ${i === selectedItem ? 'selected' : ''}" data-item-index="${i}" ${paused ? '' : 'tabindex="-1"'}><span class="item-icon" aria-hidden="true">${icons[id] ?? '◇'}</span><span><strong>${t(id)}</strong><small>×${count}</small></span></button>`).join('') : `<p>${t('empty')}</p>`;
+  const card = $('#backpack-items .selected'); if (card) $('#backpack-items').scrollTop = Math.max(0, card.offsetTop - $('#backpack-items').offsetTop - 70);
 }
+$('#backpack-items').onclick = e => { if (!paused) return; const item=e.target.closest('[data-item-index]'); if(item){ selectedItem=+item.dataset.itemIndex; audio.effect('item'); renderBackpack(); } };
+// Menus are the only mouse-selectable game UI. Hover uses a short, gentle plip.
+document.addEventListener('pointerover', e => { const item=e.target.closest('button,select,input'); if(item && !item.disabled && (!running || paused)) audio.effect('hover'); });
+document.addEventListener('click', e => { if (e.target.closest('button') && (!running || paused)) { audio.unlock(); audio.effect('select'); } });
 
 function renderHUD() {
+  sceneDirty = true;
   if (!running) return;
   $('#clock').textContent = `DAY ${Math.floor(elapsed / 2880) + 1} / 7 · ${String(Math.floor(hour())).padStart(2, '0')}:${String(Math.floor(hour() % 1 * 60)).padStart(2, '0')}`;
   $('#weather').textContent = `${t(seasonKeys[season])} · ${t(weather)} · ${t(night() ? 'night' : 'day')}`;
   $('#balance').textContent = `₩ ${money.toLocaleString()}`;
-  const state = jumpHeight > 0 ? 'airborne' : posture === 'crouch' ? 'crouched' : posture === 'prone' ? 'proneState' : 'stand';
+  const state = inWater() ? (diveDepth > 1.1 ? 'underwater' : 'swimming') : jumpHeight > 0 ? 'airborne' : posture === 'crouch' ? 'crouched' : posture === 'prone' ? 'proneState' : displayPosture() === 'sneak' ? 'sneaking' : displayPosture() === 'run' ? 'runningState' : 'stand';
   $('#status').textContent = `${t(danger ? 'danger' : 'safe')} · ${t(state)} · ${t(cameraMode === 'tent' ? 'firstPerson' : cameraMode === 'shop' ? 'shoulderView' : 'outdoorView')}`;
   $('#missions').innerHTML = `${camp ? '✓' : '○'} ${t('campGoal')}<br>${treeCount ? '✓' : '○'} ${t('treeGoal')}<br>${visited.has('summit') ? '✓' : '○'} ${t('summitGoal')}`;
   $('#journal').textContent = t(season === 3 && !inventory.has('winterBag') ? 'winterTip' : weather === 'rain' && !inventory.has('tarp') ? 'rainTip' : 'peacefulTip');
@@ -430,6 +469,7 @@ const heldTool = new THREE.Group(); camper.body.add(heldTool); heldTool.position
 mesh(new THREE.CylinderGeometry(0.045, 0.055, 1.0, 7), '#805f3a', 0, 0.35, 0, heldTool);
 const toolHead = mesh(new THREE.BoxGeometry(0.42, 0.32, 0.09), '#abb2ae', 0.15, 0.8, 0, heldTool);
 function stepGame(dt, now, realSeconds) {
+  simulationSeconds += dt;
   elapsed += realSeconds;
   if (elapsed >= 7 * 24 * 120) { finish(); return; }
   let dx = 0, dz = 0;
@@ -440,16 +480,22 @@ function stepGame(dt, now, realSeconds) {
   const dir = new THREE.Vector3(dx, 0, dz);
   if (dir.length()) { target = null; dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw); }
   else if (target) { dir.copy(target).sub(player.position); dir.y = 0; if (dir.length() < 0.7) { target = null; dir.set(0, 0, 0); } else dir.normalize(); }
-  const speed = movementSpeed(cameraMode === 'outdoor' ? mode : 'walk', posture, keys.has('ShiftLeft'));
+  const creep = keys.has('ControlLeft'), sprint = keys.has('ShiftLeft');
+  const speed = inWater() ? 1.7 * (creep ? .4 : sprint ? 3 : 1) : movementSpeed(cameraMode === 'outdoor' ? mode : 'walk', posture, sprint, creep);
   const before = { x: player.position.x, z: player.position.z };
-  const moved = resolveMovement(before, { x: dir.x * speed * dt, z: dir.z * speed * dt }, allColliders());
+  const moved = resolveMovement(before, { x: dir.x * speed * dt, z: dir.z * speed * dt }, allColliders(), .55, { allowWater: true });
   player.position.x = moved.x; player.position.z = moved.z;
   if (target && Math.hypot(moved.x - before.x, moved.z - before.z) < 0.001 && dir.length()) target = null;
   if (jumpHeight > 0 || jumpVelocity > 0) ({ height: jumpHeight, velocity: jumpVelocity } = verticalStep(jumpHeight, jumpVelocity, dt));
-  updateInterior(); player.position.y = currentFloor() + jumpHeight;
+  updateInterior();
+  const wet = inWater();
+  if (wet) { jumpHeight = jumpVelocity = 0; diveDepth = THREE.MathUtils.clamp(diveDepth + ((keys.has('KeyQ') ? 1 : 0) - (keys.has('Space') ? 1 : 0)) * dt * 2.0, 0, Math.max(0,-currentFloor()-1.35)); }
+  else diveDepth = 0;
+  player.position.y = playerBaseY() + jumpHeight;
+  if (dir.length() && now-lastFootstep > (wet ? 650 : creep ? 760 : sprint ? 240 : 460)) { audio.effect(wet ? 'splash' : 'step'); lastFootstep = now; }
   if (dir.length()) player.rotation.y = Math.atan2(dir.x, dir.z);
   else if (cameraMode !== 'outdoor') player.rotation.y = yaw + Math.PI;
-  poseCamper(camper, posture, dir.length() > 0, now);
+  poseCamper(camper, inWater() ? 'swim' : displayPosture(dir.length() > 0), dir.length() > 0, now);
   heldTool.visible = !!activeTool && inventory.has(activeTool);
   heldTool.rotation.z = now - actionAt < 350 ? Math.sin((now - actionAt) / 350 * Math.PI) * 1.7 : -0.15;
   toolHead.scale.set(activeTool === 'pickaxe' ? 1.8 : 1, activeTool === 'shovel' ? 1.6 : 1, 1);
@@ -457,11 +503,16 @@ function stepGame(dt, now, realSeconds) {
   if (Math.hypot(player.position.x - SUMMIT.x, player.position.z - SUMMIT.z) < SUMMIT.radius) visited.add('summit');
   const tick = Math.floor(elapsed / 120);
   if (tick !== weatherTick) {
-    weatherTick = tick; weather = ['clear', ['blossoms', 'rain', 'leaves', 'snow'][season], 'fog'][Math.floor(Math.random() * 3)];
-    if (tick > lastEncounter) { lastEncounter = tick; if (!danger && cameraMode === 'outdoor' && Math.random() < (night() ? (clean && protectedCamp ? 0.005 : 0.25) : 0.05)) { danger = true; toast('animalWarning'); } }
+    weatherTick = tick; weatherProfile = sampleWeather(season); weather = weatherProfile.kind;
+    if (tick > lastEncounter) { lastEncounter = tick; if (!danger && cameraMode === 'outdoor' && !inWater() && Math.random() < (night() ? (clean && protectedCamp ? 0.005 : 0.25) : 0.05)) { danger = true; toast('animalWarning'); } }
   }
+  if (danger && !threatSpawned && cameraMode === 'outdoor' && !inWater()) {
+    const fox = animals.find(a=>a.userData.species==='fox');
+    audio.effect('animal'); fox.position.set(player.position.x+6,terrainHeight(player.position.x+6,player.position.z-4),player.position.z-4); threatSpawned=true;
+  }
+  if (!danger) threatSpawned=false;
   if (danger && cameraMode !== 'outdoor') { danger = false; toast('safeZone'); }
-  particles.visible = cameraMode === 'outdoor' && weather !== 'clear' && weather !== 'fog';
+  particles.visible = cameraMode === 'outdoor' && (weather === 'rain' || weather === 'snow') && diveDepth < 1.1;
   particles.position.set(player.position.x, currentFloor(), player.position.z);
   particles.material.map = precipitationMaps[weather] ?? precipitationMaps.blossoms;
   particles.material.size = weather === 'rain' ? 0.7 : season === 3 ? 0.25 : 0.33;
@@ -476,11 +527,8 @@ function stepGame(dt, now, realSeconds) {
   });
   animateWildlife(animals, elapsed, dt);
   world.animate(dt, elapsed, player.position); shopBuilding.update(dt);
-  if (campfire) {
-    campfire.userData.flame.visible = campfire.userData.lit;
-    campfire.userData.flame.scale.setScalar(0.9 + Math.sin(now * 0.015) * 0.1);
-    campfire.userData.light.intensity = campfire.userData.lit ? 6 + Math.sin(now * 0.013) : 0;
-  }
+  marine.update(dt, elapsed, player.position);
+  audio.setMode(danger && night() ? 'tense' : 'calm'); audio.setAmbience(weather,inWater() || player.position.x > WORLD.landMaxX-30);
   if (now - lastHUD > 100) { renderHUD(); lastHUD = now; }
 }
 let previous = performance.now();
@@ -490,37 +538,66 @@ function animate(now) {
   const dt = Math.min(realSeconds, 0.1); previous = now;
   if (advancing()) stepGame(dt, now, realSeconds);
   if (!running) { renderer.render(titleScene, titleCamera); return; }
+  // A paused view is static. Redraw only for a menu action, option or resize.
+  if (!advancing() && !sceneDirty) return;
+  sceneDirty = false; updateInterior();
   const daylight = THREE.MathUtils.clamp(Math.sin((hour() - 5) / 14 * Math.PI), 0.10, 1);
   ambient.intensity = night() ? 0.65 : 1.4 + Math.sqrt(daylight) * 1.8; sun.intensity = daylight * 2.5;
   sun.target.position.copy(player.position);
   sun.position.set(player.position.x + Math.cos(hour() / 24 * Math.PI * 2) * 80, player.position.y + Math.max(16, daylight * 110), player.position.z - 45);
-  const sky = atmosphere.update(hour(), weather, elapsed, player.position);
-  scene.fog.color.copy(sky.horizon); scene.fog.density = cameraMode !== 'outdoor' ? 0.0003 : weather === 'fog' ? 0.0045 : 0.00085;
-  const eye = posture === 'prone' ? 0.6 : posture === 'crouch' ? 1.1 : 2.1;
-  if (cameraMode === 'tent') {
+  const sky = atmosphere.update(hour(), weather, elapsed, player.position, weatherProfile);
+  scene.fog.color.copy(sky.horizon); scene.fog.density = cameraMode !== 'outdoor' ? 0.0003 : weather === 'fog' ? 0.0045 : 0.00038;
+  const eye = posture === 'prone' ? 0.6 : posture === 'crouch' ? 1.1 : displayPosture() === 'sneak' ? 1.9 : 2.1;
+  if (cameraMode === 'tent' || (inWater() && diveDepth > 1.1)) {
     camera.position.set(player.position.x, player.position.y + eye, player.position.z);
-    camera.lookAt(player.position.x - Math.sin(yaw) * 10, player.position.y + eye - Math.sin(pitch - 0.32) * 10, player.position.z - Math.cos(yaw) * 10);
+    camera.lookAt(camera.position.x - Math.sin(yaw) * Math.cos(pitch-.32) * 10, camera.position.y - Math.sin(pitch-.32) * 10, camera.position.z - Math.cos(yaw) * Math.cos(pitch-.32) * 10);
   } else if (cameraMode === 'shop') {
     const b = shopBuilding.bounds, back = 2.7;
     camera.position.set(THREE.MathUtils.clamp(player.position.x + Math.sin(yaw) * back + Math.cos(yaw) * 0.8, b.minX + 0.7, b.maxX - 0.7), player.position.y + 2.6 + Math.sin(pitch - 0.32), THREE.MathUtils.clamp(player.position.z + Math.cos(yaw) * back - Math.sin(yaw) * 0.8, b.minZ + 0.7, b.maxZ - 0.7));
     const safeCamera = resolveMovement(player.position, { x: camera.position.x - player.position.x, z: camera.position.z - player.position.z }, shopBuilding.colliders(), 0.22);
     camera.position.x = safeCamera.x; camera.position.z = safeCamera.z;
-    camera.lookAt(player.position.x - Math.sin(yaw) * 5, player.position.y + 1.8 - Math.sin(pitch - 0.32) * 5, player.position.z - Math.cos(yaw) * 5);
+    camera.lookAt(camera.position.x - Math.sin(yaw)*Math.cos(pitch-.32)*10, camera.position.y - Math.sin(pitch-.32)*10, camera.position.z - Math.cos(yaw)*Math.cos(pitch-.32)*10);
   } else {
-    camera.position.set(player.position.x + Math.sin(yaw) * dist * Math.cos(pitch), player.position.y + eye + Math.sin(pitch) * dist, player.position.z + Math.cos(yaw) * dist * Math.cos(pitch));
+    const orbitPitch = Math.max(.12, Math.min(1.3, pitch));
+    camera.position.set(player.position.x + Math.sin(yaw) * dist * Math.cos(orbitPitch), player.position.y + eye + Math.sin(orbitPitch) * dist, player.position.z + Math.cos(yaw) * dist * Math.cos(orbitPitch));
     const safe = outdoorCameraPosition({ x: player.position.x, y: player.position.y + 1.8, z: player.position.z }, camera.position, { trees: world.trees, rocks: world.rocks, groundHeight: terrainHeight });
     camera.position.set(safe.x, safe.y, safe.z);
-    camera.lookAt(player.position.x, player.position.y + 1.8, player.position.z);
+    const baseAim = Math.atan2(camera.position.y-player.position.y-1.8, Math.hypot(camera.position.x-player.position.x,camera.position.z-player.position.z));
+    const aim = pitch < .12 ? baseAim + (pitch-.12) * (baseAim+1.54) / 1.34 : baseAim;
+    camera.lookAt(camera.position.x-Math.sin(yaw)*Math.cos(aim)*10,camera.position.y-Math.sin(aim)*10,camera.position.z-Math.cos(yaw)*Math.cos(aim)*10);
+  }
+  if (backpackOpen) {
+    player.visible = true;
+    const outside = cameraMode === 'outdoor', back = outside ? 12 : 5;
+    camera.position.set(player.position.x+Math.sin(yaw)*back,player.position.y+(outside ? 6 : 9),player.position.z+Math.cos(yaw)*back);
+    camera.lookAt(player.position.x,player.position.y+3.4,player.position.z);
+  }
+  const submerged = camera.position.y < -.15 && (isWater(camera.position.x,camera.position.z) || camera.position.x>COAST_START) && terrainHeight(camera.position.x,camera.position.z)<-.25;
+  scene.getObjectByName('sky-dome').visible = !submerged;
+  scenery.group.visible = !submerged;
+  if (submerged) {
+    scene.fog.color.set('#69afb4'); scene.fog.density=.045; scene.background.copy(scene.fog.color);
+    for (const name of ['weather-clouds','sun-disc','night-stars']) scene.getObjectByName(name).visible = false;
+  }
+  if (backpackOpen) {
+    // Anchor the bubble above the actual head; lift the view slightly while inspecting.
+    const head=player.position.clone().add(new THREE.Vector3(0,3.25,0)).project(camera);
+    const bubble=$('#backpack-modal'), bx=(head.x*.5+.5)*innerWidth, by=(-head.y*.5+.5)*innerHeight;
+    bubble.style.left=`${THREE.MathUtils.clamp(bx, Math.min(240,innerWidth/2), innerWidth-Math.min(240,innerWidth/2))}px`;
+    bubble.style.top=`${THREE.MathUtils.clamp(by,Math.min(bubble.offsetHeight+24,innerHeight*.7),innerHeight-45)}px`;
   }
   renderer.render(scene, camera);
 }
-addEventListener('resize', () => {
+addEventListener('resize', () => { sceneDirty = true;
   [camera, titleCamera].forEach(c => { c.aspect = innerWidth / innerHeight; c.updateProjectionMatrix(); }); renderer.setSize(innerWidth, innerHeight);
 });
 syncOptions(); localize(); requestAnimationFrame(animate);
 if (import.meta.env.DEV) {
   window.__camper = {
-    snapshot: () => ({ running, paused, cameraMode, elapsed, money, inventory: Object.fromEntries(inventory), player: player.position.toArray(), yaw, pitch, tentConfig: { ...tentConfig }, treeCount, shopDoor: shopBuilding.doorOpen, context: contextAction?.kind, trees: world.trees.map(({ id, x, z, hits, felled }) => ({ id, x, z, hits, felled })), camp: camp ? { position: camp.group.position.toArray(), entrance: camp.entrance.toArray(), inside: camp.insidePosition.toArray(), doorOpen: camp.doorOpen, bounds: camp.bounds } : null }),
-    teleport(x, z, facing = 0) { if (!Number.isFinite(x) || !Number.isFinite(z)) return; player.position.set(x, terrainHeight(x, z), z); yaw = facing; jumpHeight = 0; jumpVelocity = 0; clearMovement(); updateInterior(); player.position.y = currentFloor(); player.rotation.y = yaw + Math.PI; renderHUD(); },
+    snapshot: () => ({ running, paused, simulationSeconds, pose: displayPosture(), bodyLean: camper.upperBody.rotation.x, backpackOpen, optionsOpen, shopOpen, weather, weatherProfile, atmosphere: atmosphere.getState?.(), audio: audio.getState(), marine: marine.getState(), seaLife: marine.creatures.slice(0,8).map(g=>g.position.toArray()), diveDepth, inWater: inWater(), cameraY: camera.position.y, viewDirection: camera.getWorldDirection(new THREE.Vector3()).toArray(), world: WORLD, scenery: scenery.bounds, cameraMode, elapsed, money, inventory: Object.fromEntries(inventory), player: player.position.toArray(), yaw, pitch, tentConfig: { ...tentConfig }, treeCount, shopDoor: shopBuilding.doorOpen, context: contextAction?.kind, trees: world.trees.map(({ id, x, z, hits, felled }) => ({ id, x, z, hits, felled })), camp: camp ? { position: camp.group.position.toArray(), entrance: camp.entrance.toArray(), inside: camp.insidePosition.toArray(), doorOpen: camp.doorOpen, bounds: camp.bounds } : null }),
+    setWeather(kind,cover=0) { sceneDirty = true; weather=kind;weatherProfile={kind,cloudCover:cover,wind:1,precipitation:kind==='rain'||kind==='snow'?1:0}; },
+    setTime(hours) { elapsed=(hours-5+24)%24*120;weatherTick=Math.floor(elapsed/120);renderHUD(); },
+    setDanger(value) {danger=value;},
+    teleport(x, z, facing = 0) { if (!Number.isFinite(x) || !Number.isFinite(z)) return; player.position.set(x, terrainHeight(x, z), z); yaw = facing; pitch = .32; jumpHeight = 0; jumpVelocity = 0; clearMovement(); updateInterior(); diveDepth = 0; player.position.y = playerBaseY(); player.rotation.y = yaw + Math.PI; renderHUD(); },
   };
 }

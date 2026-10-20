@@ -50,9 +50,9 @@ function coloredGeometry(geometry, lower, upper) {
 }
 function canopyGeometry(pine = false) {
   if (!pine) {
-    const geo = new THREE.IcosahedronGeometry(1, 1), p = geo.attributes.position;
+    const geo = new THREE.SphereGeometry(1, 12, 8), p = geo.attributes.position;
     for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), f = 1 + Math.sin(x * 9 + y * 4) * Math.cos(z * 7) * .065; p.setXYZ(i, x * f, y * f, z * f); }
-    geo.computeVertexNormals(); return coloredGeometry(geo, '#73b23e', '#e0f27b');
+    geo.computeVertexNormals(); return coloredGeometry(geo, '#79a675', '#d1e2b7');
   }
   // A scalloped, softly curved pine bough with visible overlapping skirts.
   const geo = new THREE.ConeGeometry(1, 1, 10, 3), p = geo.attributes.position;
@@ -100,25 +100,25 @@ export function createWorld(scene) {
   mesh(group, terrain, groundMaterial, 0, 0, 0).castShadow = false;
   const foliageMaterials = [0, 1, 2].map(() => new THREE.MeshStandardMaterial({ color: '#71c746', vertexColors: true, roughness: .88 }));
   const barkMaterials = ['#d5a14f', '#c79749', '#e8d7a1'].map(color => new THREE.MeshStandardMaterial({ color, roughness: .94, map: barkMap }));
-  const rockMaterial = new THREE.MeshStandardMaterial({ color: '#e8ba86', vertexColors: true, map: stoneMap, roughness: .92, flatShading: true });
+  const rockMaterial = new THREE.MeshStandardMaterial({ color: '#e8ba86', vertexColors: true, map: stoneMap, roughness: .92, flatShading: false });
   const mossMaterial = new THREE.MeshStandardMaterial({ color: '#76ba39', vertexColors: true, roughness: .95 });
   const woodMaterial = new THREE.MeshStandardMaterial({ color: '#b88643', map: barkMap, roughness: .9 });
   const waterTime = { value: 0 };
-  const waterMaterial = new THREE.MeshStandardMaterial({ color: '#24b7b5', roughness: .3, metalness: .12, transparent: true, opacity: .94 });
+  const waterMaterial = new THREE.MeshStandardMaterial({ color: '#24b7b5', roughness: .3, metalness: .12, transparent: true, opacity: .56, side: THREE.DoubleSide, depthWrite: false });
   waterMaterial.onBeforeCompile = shader => {
     shader.uniforms.uLandscapeTime = waterTime;
     shader.vertexShader = `varying vec3 vPaintedWater;\n${shader.vertexShader}`.replace('#include <begin_vertex>', '#include <begin_vertex>\nvPaintedWater = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = `uniform float uLandscapeTime; varying vec3 vPaintedWater;\n${shader.fragmentShader}`.replace('#include <color_fragment>', '#include <color_fragment>\nfloat ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uLandscapeTime * .8) * sin(vPaintedWater.z * .57 - uLandscapeTime * .46); float line = smoothstep(.86, .99, ripple); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.6,.94,.9), line * .24);');
   };
   waterMaterial.customProgramCacheKey = () => 'painted-water-v1';
-  const seaWidth = WORLD.maxX - WORLD.landMaxX;
-  const sea = mesh(group, new THREE.PlaneGeometry(seaWidth, depth, 28, 60), waterMaterial, WORLD.landMaxX + seaWidth / 2, 0, (WORLD.minZ + WORLD.maxZ) / 2); sea.rotation.x = -Math.PI / 2; sea.castShadow = false;
+  const seaStart = coastStart + 8, seaWidth = WORLD.maxX - seaStart;
+  const sea = mesh(group, new THREE.PlaneGeometry(seaWidth, depth, 28, 60), waterMaterial, seaStart + seaWidth / 2, 0, (WORLD.minZ + WORLD.maxZ) / 2); sea.rotation.x = -Math.PI / 2; sea.castShadow = false;
   const lake = mesh(group, new THREE.CircleGeometry(1, 80), waterMaterial, LAKE.x, .1, LAKE.z); lake.rotation.x = -Math.PI / 2; lake.scale.set(LAKE.radiusX, LAKE.radiusZ, 1); lake.castShadow = false;
   const river = ribbon(Array.from({ length: 85 }, (_, i) => { const z = riverStart + i / 84 * (WORLD.maxZ - riverStart); return { x: riverX(z), y: .12, z }; }), 11, waterMaterial, group);
   const foamMaterial = new THREE.MeshBasicMaterial({ color: '#d8fff0', transparent: true, opacity: .52, side: THREE.DoubleSide, depthWrite: false });
   const shoreLines = [];
   for (let n = 0; n < 3; n++) {
-    const pts = Array.from({ length: 190 }, (_, i) => ({ x: WORLD.landMaxX + 1 + n * 4 + Math.sin(i * .3) * .6, y: .14, z: WORLD.minZ + 1 + i / 189 * (depth - 2) }));
+    const pts = Array.from({ length: 190 }, (_, i) => ({ x: coastStart + 22 + n * 4 + Math.sin(i * .3) * .6, y: .14, z: WORLD.minZ + 1 + i / 189 * (depth - 2) }));
     shoreLines.push(ribbon(pts, .25 + n * .15, foamMaterial, group));
   }
   const trailSamples = Array.from({ length: 360 }, (_, i) => trailPoint(i / 359));
@@ -135,7 +135,7 @@ export function createWorld(scene) {
   const trunkGeo = coloredGeometry(new THREE.CylinderGeometry(.62, 1, 1, 10, 3), '#ab8140', '#ffdc90');
   const branchGeo = new THREE.CylinderGeometry(.13, .25, 1, 6);
   const leafGeo = canopyGeometry(), pineGeo = canopyGeometry(true);
-  const TREE_COUNT = 1050, LEAF_LAYERS = 6, BRANCHES = 5;
+  const TREE_COUNT = 1800, LEAF_LAYERS = 6, BRANCHES = 5;
   const specifications = [{ x: -23, z: -8, radius: .72, h: 10.5, species: 1 }];
   // A readable, lush foreground around the trailhead, and equally dense new land.
   let attempts = 0;
@@ -147,16 +147,25 @@ export function createWorld(scene) {
     const h = 7.5 + random() * 8;
     specifications.push({ x, z, radius: .42 + h * .028, h, species: terrainHeight(x, z) > 62 && random() < .7 ? 0 : random() < .16 ? 0 : random() < .6 ? 1 : 2 });
   }
-  const batches = Array.from({ length: 3 }, (_, species) => {
-    const trunk = new THREE.InstancedMesh(trunkGeo, barkMaterials[species], TREE_COUNT);
-    const branches = new THREE.InstancedMesh(branchGeo, barkMaterials[species], TREE_COUNT * BRANCHES);
-    const leaves = Array.from({ length: LEAF_LAYERS }, () => new THREE.InstancedMesh(species === 0 ? pineGeo : leafGeo, foliageMaterials[species], TREE_COUNT));
+  // Spatial batches keep a tripled map from drawing every tree into each shadow.
+  const tiles = new Map();
+  for (const spec of specifications) {
+    spec.batchKey = `${spec.species}:${Math.floor(spec.x/180)}:${Math.floor(spec.z/180)}`;
+    if (!tiles.has(spec.batchKey)) tiles.set(spec.batchKey, []);
+    tiles.get(spec.batchKey).push(spec);
+  }
+  const batchByTile = new Map();
+  const batches = [...tiles].map(([key, specs]) => {
+    const species = specs[0].species, capacity = specs.length;
+    const trunk = new THREE.InstancedMesh(trunkGeo, barkMaterials[species], capacity);
+    const branches = new THREE.InstancedMesh(branchGeo, barkMaterials[species], capacity * BRANCHES);
+    const leaves = Array.from({ length: LEAF_LAYERS }, () => new THREE.InstancedMesh(species === 0 ? pineGeo : leafGeo, foliageMaterials[species], capacity));
     [trunk, branches, ...leaves].forEach(m => { m.count = 0; m.castShadow = true; m.receiveShadow = true; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); group.add(m); });
-    return { trunk, branches, leaves, count: 0 };
+    const batch = { trunk, branches, leaves, count: 0 }; batchByTile.set(key, batch); return batch;
   });
   const dummy = new THREE.Object3D(), hide = new THREE.Matrix4().makeScale(0, 0, 0), instanceTint = new THREE.Color();
   for (const spec of specifications) {
-    const { x, z, radius, h, species } = spec, y = terrainHeight(x, z), batch = batches[species], index = batch.count++;
+    const { x, z, radius, h, species } = spec, y = terrainHeight(x, z), batch = batchByTile.get(spec.batchKey), index = batch.count++;
     const object = new THREE.Group(); object.position.set(x, y, z); object.userData.interaction = 'tree'; group.add(object);
     const tree = { ...spec, id: `tree-${trees.length}`, y, hits: 0, felled: false, object, stump: null, index, batch };
     const collider = { kind: 'circle', x, z, radius, active: true, id: tree.id }; tree.collider = collider; colliders.push(collider); trees.push(tree);
@@ -261,7 +270,7 @@ export function createWorld(scene) {
     for (let i = 0; i < vertices.count; i++) {
       const x = vertices.getX(i), y = vertices.getY(i), z = vertices.getZ(i), patch = Math.sin(x * .037 + Math.cos(z * .05)) * Math.sin(z * .031) * .035;
       const coast = x > coastStart - 10;
-      green.set(index === 3 ? y > 10 ? '#e9f2ec' : '#cfdfd2' : ['#72c448', '#50b43d', '#bcad44', '#dce9e1'][index]);
+      green.set(index === 3 ? y > 10 ? '#e9f2ec' : '#cfdfd2' : ['#a3c99b', '#86bd93', '#ccb689', '#dce9e1'][index]);
       cliff.set(index === 3 ? '#c0c6bc' : '#daa676');
       const slope = 1 - Math.max(0, normals.getY(i));
       baseColor.copy(green).lerp(cliff, THREE.MathUtils.smoothstep(slope, .1, .34));
@@ -269,7 +278,7 @@ export function createWorld(scene) {
       baseColor.offsetHSL(0, 0, patch); colors[i * 3] = baseColor.r; colors[i * 3 + 1] = baseColor.g; colors[i * 3 + 2] = baseColor.b;
     }
     terrain.attributes.color.needsUpdate = true;
-    foliageMaterials.forEach((m, species) => m.color.set(index === 3 ? species === 0 ? '#9bbda4' : '#b9d4b6' : index === 2 ? ['#a7b63d', '#e6a23a', '#e3bf4c'][species] : index === 0 ? ['#5bb73a', '#7bcd3a', '#a3d94a'][species] : ['#36a338', '#64c62f', '#86d63c'][species]));
+    foliageMaterials.forEach((m, species) => m.color.set(index === 3 ? species === 0 ? '#9bbda4' : '#b9d4b6' : index === 2 ? ['#a7b63d', '#e6a23a', '#e3bf4c'][species] : index === 0 ? ['#89b793', '#a3c799', '#c1d4a7'][species] : ['#36a338', '#64c62f', '#86d63c'][species]));
     grassMaterial.color.set(['#85d548', '#63c43d', '#c5ba54', '#d9e7d8'][index]); fernMaterial.color.copy(grassMaterial.color);
     flowerMaterial.color.set(['#fff0b5', '#ffedaf', '#edbe7b', '#f4f6f1'][index]);
   }

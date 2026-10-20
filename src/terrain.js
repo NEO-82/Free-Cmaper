@@ -1,11 +1,13 @@
 // Shared world coordinates and collision math. Keep independent of Three.js so
 // hiking, terrain sampling and tests all use exactly the same surface.
-export const WORLD = Object.freeze({ minX: -500, maxX: 500, minZ: -400, maxZ: 400, landMaxX: 165 });
+export const WORLD = Object.freeze({ minX: -870, maxX: 870, minZ: -690, maxZ: 690, landMaxX: 285 });
+// The unreachable ring has twice the playable area; total scenery is 3×.
+export const SCENERY = Object.freeze({ minX: WORLD.minX * Math.sqrt(3), maxX: WORLD.maxX * Math.sqrt(3), minZ: WORLD.minZ * Math.sqrt(3), maxZ: WORLD.maxZ * Math.sqrt(3) });
 export const SHOP = Object.freeze({ x: -30, z: -35 });
 export const SUMMIT = Object.freeze({ x: -145, z: -195, radius: 20, height: 88 });
 export const LAKE = Object.freeze({ x: -160, z: 250, radiusX: 55, radiusZ: 42 });
 export const RIVER_START = 280;
-export const COAST_START = 130;
+export const COAST_START = 250;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 export function riverX(z) { return LAKE.x + Math.sin((z - RIVER_START) * 0.03) * 19; }
@@ -56,23 +58,25 @@ export function circleOverlaps(x, z, radius, collider) {
   }
   return false;
 }
-export function canOccupy(x, z, colliders = [], radius = 0.55) {
+export function canOccupy(x, z, colliders = [], radius = 0.55, { allowWater = false } = {}) {
   if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
   if (x < WORLD.minX + radius || x > WORLD.maxX - radius || z < WORLD.minZ + radius || z > WORLD.maxZ - radius) return false;
-  if (isWater(x, z)) return false;
-  for (let i = 0; i < 8; i++) if (isWater(x + Math.cos(i * Math.PI / 4) * radius, z + Math.sin(i * Math.PI / 4) * radius)) return false;
+  if (!allowWater) {
+    if (isWater(x, z) || (x > COAST_START && terrainHeight(x, z) < .15)) return false;
+    for (let i = 0; i < 8; i++) if (isWater(x + Math.cos(i * Math.PI / 4) * radius, z + Math.sin(i * Math.PI / 4) * radius)) return false;
+  }
   return !colliders.some(c => circleOverlaps(x, z, radius, c));
 }
-export function resolveMovement(position, delta, colliders = [], radius = 0.55) {
+export function resolveMovement(position, delta, colliders = [], radius = 0.55, options = {}) {
   if (![position.x, position.z, delta.x, delta.z].every(Number.isFinite)) return { x: position.x, z: position.z };
   let x = position.x, z = position.z;
   const steps = Math.max(1, Math.ceil(Math.hypot(delta.x, delta.z) / Math.max(0.15, radius * 0.65)));
   const dx = delta.x / steps, dz = delta.z / steps;
   for (let i = 0; i < steps; i++) {
-    if (canOccupy(x + dx, z + dz, colliders, radius)) { x += dx; z += dz; }
+    if (canOccupy(x + dx, z + dz, colliders, radius, options)) { x += dx; z += dz; }
     else {
-      if (canOccupy(x + dx, z, colliders, radius)) x += dx;
-      if (canOccupy(x, z + dz, colliders, radius)) z += dz;
+      if (canOccupy(x + dx, z, colliders, radius, options)) x += dx;
+      if (canOccupy(x, z + dz, colliders, radius, options)) z += dz;
     }
   }
   return { x, z };

@@ -5,7 +5,7 @@ import { translate } from '../src/i18n.js';
 
 test('options accept saved values and constrain corrupt or out-of-range settings', () => {
   assert.deepEqual(normalizeOptions(null), DEFAULT_OPTIONS);
-  assert.deepEqual(normalizeOptions({ brightness: 500, sensitivity: -2, invertX: true, invertY: 'false', language: 'xx' }), { brightness: 150, sensitivity: 0.2, invertX: true, invertY: false, language: 'ko' });
+  assert.deepEqual(normalizeOptions({ brightness: 500, sensitivity: -2, invertX: true, invertY: 'false', language: 'xx' }), { ...DEFAULT_OPTIONS, brightness: 150, sensitivity: 0.2, invertX: true, invertY: false, language: 'ko' });
   assert.equal(normalizeOptions({ sensitivity: 'bad' }).sensitivity, 1);
 });
 test('mouse sensitivity scales yaw and pitch, inversion reverses each axis independently', () => {
@@ -16,14 +16,22 @@ test('mouse sensitivity scales yaw and pitch, inversion reverses each axis indep
   assert.ok(Math.abs(inverted.pitch + normal.pitch - 1.2) < 1e-10);
   const fast = lookAngles(0, 0.6, 10, 10, { ...DEFAULT_OPTIONS, sensitivity: 2 });
   assert.equal(fast.yaw, 2 * normal.yaw);
-  assert.equal(lookAngles(0, 0.6, 0, 10000, DEFAULT_OPTIONS).pitch, 1.3);
-  assert.equal(lookAngles(0, 0.6, 0, -10000, DEFAULT_OPTIONS).pitch, 0.12);
+  assert.equal(lookAngles(0, 0.6, 0, 10000, DEFAULT_OPTIONS).pitch, 1.82);
+  assert.equal(lookAngles(0, 0.6, 0, -10000, DEFAULT_OPTIONS).pitch, -1.22);
 });
-test('slow movement and postures reduce speed without changing the transport choice', () => {
-  assert.equal(movementSpeed('walk', 'stand', false), 3);
-  assert.ok(movementSpeed('walk', 'stand', true) < 3);
-  assert.ok(movementSpeed('walk', 'prone', false) < movementSpeed('walk', 'crouch', false));
-  assert.equal(movementSpeed('car', 'stand', false), 8);
+test('base walking is half the former speed and Shift runs at exactly three times walking', () => {
+  for (const [mode,previous] of [['walk',3],['car',8]]) {
+    const walk=movementSpeed(mode,'stand');
+    assert.equal(walk,previous/2);
+    assert.equal(movementSpeed(mode,'stand',true),walk*3);
+  }
+});
+test('Ctrl creeps slower than walking, wins over Shift, and release restores walking', () => {
+  const walk=movementSpeed('walk','stand');
+  assert.ok(movementSpeed('walk','stand',false,true)<walk);
+  assert.equal(movementSpeed('walk','stand',true,true),movementSpeed('walk','stand',false,true));
+  assert.equal(movementSpeed('walk','stand',false,false),walk);
+  assert.ok(movementSpeed('walk','prone')<movementSpeed('walk','crouch'));
 });
 test('C and V toggle their respective postures and switch directly between them', () => {
   assert.equal(togglePosture('stand', 'crouch'), 'crouch');
@@ -49,4 +57,10 @@ test('core control and inventory labels are available in both languages', () => 
     assert.notEqual(translate(key, 'ko'), key); assert.notEqual(translate(key, 'en'), key);
     assert.notEqual(translate(key, 'ko'), translate(key, 'en'));
   }
+});
+
+test('saved audio levels are clamped and mute requires a boolean', () => {
+  const value=normalizeOptions({musicVolume:4,sfxVolume:-1,muted:true});
+  assert.equal(value.musicVolume,1);assert.equal(value.sfxVolume,0);assert.equal(value.muted,true);
+  assert.equal(normalizeOptions({muted:'true'}).muted,false);
 });

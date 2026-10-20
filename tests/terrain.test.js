@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WORLD, SHOP, SUMMIT, LAKE, terrainHeight, isWater, trailPoint, resolveMovement } from '../src/terrain.js';
+import { WORLD, SCENERY, SHOP, SUMMIT, LAKE, terrainHeight, isWater, canOccupy, trailPoint, resolveMovement } from '../src/terrain.js';
 
 const close = (actual, expected, tolerance = 1e-6) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} should be close to ${expected}`);
 
-test('expanded map has twice the previous area and keeps the eastern sea', () => {
+test('expanded map has three times the previous area and keeps the eastern sea', () => {
   const area = (WORLD.maxX - WORLD.minX) * (WORLD.maxZ - WORLD.minZ);
-  assert.ok(area / (700 * 570) >= 1.99 && area / (700 * 570) <= 2.02);
+  assert.ok(Math.abs(area / (1000 * 800) - 3) < .01);
   assert.ok((WORLD.maxX - WORLD.landMaxX) / (WORLD.maxX - WORLD.minX) > 0.3);
   assert.equal(isWater(WORLD.landMaxX + 15, 0), true);
   assert.equal(isWater(SHOP.x, SHOP.z), false);
@@ -87,4 +87,36 @@ test('world borders and water cannot be crossed by very large movement steps', (
   const lake = resolveMovement({ x: LAKE.x, z: LAKE.z - LAKE.radiusZ - 12 }, { x: 0, z: 100 }, [], 0.55);
   assert.equal(isWater(lake.x, lake.z), false);
   assert.ok(lake.z < LAKE.z - LAKE.radiusZ, 'cannot tunnel through the southern lake');
+});
+
+
+test('visual ring has twice the playable area and water movement still obeys all four borders', () => {
+  const area=(WORLD.maxX-WORLD.minX)*(WORLD.maxZ-WORLD.minZ);
+  const scenery=(SCENERY.maxX-SCENERY.minX)*(SCENERY.maxZ-SCENERY.minZ);
+  close((scenery-area)/area,2);
+  for (const [start,delta] of [
+    [{x:WORLD.maxX-10,z:0},{x:100,z:0}], [{x:WORLD.minX+10,z:0},{x:-100,z:0}],
+    [{x:WORLD.landMaxX+30,z:WORLD.minZ+10},{x:0,z:-100}], [{x:WORLD.landMaxX+30,z:WORLD.maxZ-10},{x:0,z:100}],
+  ]) {
+    const end=resolveMovement(start,delta,[],.55,{allowWater:true});
+    assert.ok(end.x>=WORLD.minX+.55-1e-6 && end.x<=WORLD.maxX-.55+1e-6);
+    assert.ok(end.z>=WORLD.minZ+.55-1e-6 && end.z<=WORLD.maxZ-.55+1e-6);
+  }
+});
+
+test('swimmers cross the beach and sea while camps and animals still require dry ground', () => {
+  const start={x:WORLD.landMaxX-40,z:0};
+  const swimmer=resolveMovement(start,{x:70,z:0},[],.55,{allowWater:true});
+  close(swimmer.x,WORLD.landMaxX+30);
+  assert.equal(isWater(swimmer.x,swimmer.z),true);
+  const dry=resolveMovement(start,{x:70,z:0});assert.equal(isWater(dry.x,dry.z),false);
+  const rock={kind:'circle',x:WORLD.landMaxX+10,z:0,radius:2};
+  const blocked=resolveMovement({x:WORLD.landMaxX,z:0},{x:30,z:0},[rock],.55,{allowWater:true});
+  assert.ok(blocked.x<rock.x-2);
+});
+
+
+test('dry inland valleys below sea level remain walkable land', () => {
+  const p={x:-687,z:-460};
+  assert.ok(terrainHeight(p.x,p.z)<-.3);assert.equal(isWater(p.x,p.z),false);assert.equal(canOccupy(p.x,p.z),true);
 });

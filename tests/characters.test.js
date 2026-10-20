@@ -38,7 +38,7 @@ test('all age, gender and body settings change appearance without rebuilding or 
 test('standing, crouching, sitting and prone poses keep feet and hands above the ground', () => {
   const model = createCamper(new THREE.Scene());
   let standingHeight;
-  for (const pose of ['stand', 'crouch', 'sit', 'prone']) {
+  for (const pose of ['stand', 'sneak', 'crouch', 'sit', 'prone']) {
     poseCamper(model, pose);
     const b = bounds(model);
     assert.ok(b.min.y >= -.01, `${pose} sinks below ground: ${b.min.y}`);
@@ -54,7 +54,7 @@ test('standing, crouching, sitting and prone poses keep feet and hands above the
 
 test('walking bends opposite limbs and keeps every transform finite across pose changes', () => {
   const model = createCamper(new THREE.Scene());
-  for (const pose of ['stand', 'crouch', 'prone', 'sit', 'stand']) for (const time of [0, 96, 196, 392]) {
+  for (const pose of ['stand', 'sneak', 'run', 'crouch', 'prone', 'sit', 'stand']) for (const time of [0, 96, 196, 392]) {
     poseCamper(model, pose, true, time);
     model.root.traverse(o => {
       assert.ok([...o.position, ...o.scale, ...o.quaternion].every(Number.isFinite));

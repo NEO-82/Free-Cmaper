@@ -22,8 +22,8 @@ export function footprintClear({ x, z, width, depth }, colliders = [], margin = 
 export function findCampLocation(player, tentConfig = {}, colliders = []) {
   if (![player?.x, player?.z].every(Number.isFinite)) return null;
   const scale = SIZE_SCALE[tentConfig?.size] ?? 1;
-  const width = 18 * scale, depth = 16 * scale, halfW = width / 2, halfD = depth / 2;
-  const offsets = [[14 * scale, 0], [-14 * scale, 0], [0, -15 * scale], [0, 15 * scale], [0, 0]];
+  const width = 9 * scale, depth = 8 * scale, halfW = width / 2, halfD = depth / 2;
+  const offsets = [[8 * scale, 0], [-8 * scale, 0], [0, -9 * scale], [0, 9 * scale], [0, 0]];
   for (const [ox, oz] of offsets) {
     const x = player.x + ox, z = player.z + oz;
     if (!footprintClear({ x, z, width, depth }, colliders)) continue;

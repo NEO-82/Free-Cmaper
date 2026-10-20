@@ -149,7 +149,7 @@ export function createCamper(parent, settings = {}) {
       shirtLight.color.set(gender === 'female' ? '#4ca9a2' : '#2e9dc5');
       shirtDark.color.set(gender === 'female' ? '#17656c' : '#075b85');
       ponytail.visible = gender === 'female'; glasses.visible = age === 'older'; moustache.visible = gender === 'male' && age !== 'young';
-      head.scale.setScalar(gender === 'female' ? .98 : 1);
+      head.scale.setScalar(gender === 'female' ? 1.05 : 1.07);
       return this;
     },
     dispose() {
@@ -171,13 +171,25 @@ function roundBox() {
 /** Articulated gameplay poses. Feet are at ground level in stand/sit/crouch. */
 export function poseCamper(model, pose, walking = false, now = 0) {
   const { body, upperBody, legs, knees, ankles, arms, elbows, head } = model;
-  const wave = walking ? Math.sin(now * .008) : 0;
+  const wave = walking ? Math.sin(now * (pose === 'run' ? .013 : .008)) : 0;
   body.position.set(0, 0, 0); body.rotation.set(0, 0, 0);
   upperBody.rotation.set(model.settings.age === 'older' ? .055 : 0, 0, 0);
   head.rotation.set(0, walking ? Math.sin(now * .004) * .025 : 0, 0);
   legs.forEach((leg, i) => { leg.rotation.set(wave * (i ? -1 : 1) * .38, 0, 0); knees[i].rotation.set(Math.max(0, wave * (i ? 1 : -1)) * .38, 0, 0); });
   arms.forEach((arm, i) => { arm.rotation.set(wave * (i ? 1 : -1) * .35, 0, (i ? -1 : 1) * .055); elbows[i].rotation.set(-.10, 0, 0); });
-  if (pose === 'crouch') {
+  if (pose === 'swim') {
+    body.position.y = .3; upperBody.rotation.x = -.15;
+    legs.forEach((leg, i) => { leg.rotation.x = Math.sin(now*.005+i*Math.PI)*.35; knees[i].rotation.x=.4; });
+    arms.forEach((arm,i) => { arm.rotation.set(-.75 + Math.sin(now*.005+i*Math.PI)*.3,0,(i?-1:1)*.7); elbows[i].rotation.x=-.5; });
+  } else if (pose === 'sneak') {
+    body.position.y = -.07; upperBody.rotation.x = .17;
+    legs.forEach((leg,i) => { leg.rotation.x = -.45 + wave * (i ? -.08 : .08); knees[i].rotation.x = .9; });
+    arms.forEach((arm,i) => { arm.rotation.x = -.15 + wave * (i ? .2 : -.2); elbows[i].rotation.x = -.2; });
+  } else if (pose === 'run') {
+    body.position.y = Math.abs(wave) * .06; upperBody.rotation.x = .12;
+    legs.forEach((leg,i) => { leg.rotation.x = wave * (i ? -1 : 1) * .72; knees[i].rotation.x = Math.max(0,wave*(i ? 1 : -1)) * .85; });
+    arms.forEach((arm,i) => { arm.rotation.x = wave * (i ? 1 : -1) * .8; elbows[i].rotation.x = -.8; });
+  } else if (pose === 'crouch') {
     body.position.y = -.29; upperBody.rotation.x = .18;
     legs.forEach((leg, i) => { leg.rotation.x = -.80; knees[i].rotation.x = 1.70; });
     arms.forEach((arm, i) => { arm.rotation.x = -.35; elbows[i].rotation.x = -.20; });

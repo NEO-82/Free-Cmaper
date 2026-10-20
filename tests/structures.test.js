@@ -24,22 +24,22 @@ test('shop doorway changes solidity while walls and furniture remain solid', () 
   shop.dispose(); assert.equal(scene.children.length, 0);
 });
 
-test('tent standard size is three times former width and a person can walk through its opening', () => {
+test('tent standard size is half the former width and a person can walk through its opening', () => {
   const scene = new THREE.Scene(), tent = createTent(scene, DEFAULT_TENT, { x: 20, y: 10, z: 30 });
-  assert.equal(tent.dimensions.width, 18);
-  assert.equal(tent.dimensions.depth, 16);
+  assert.equal(tent.dimensions.width, 9);
+  assert.equal(tent.dimensions.depth, 8);
   assert.equal(tent.floorY, 10.14);
-  assert.equal(blocksPoint(tent.colliders(), 20, 38), true);
+  assert.equal(blocksPoint(tent.colliders(), 20, 34), true);
   tent.setDoor(true);
-  assert.equal(blocksPoint(tent.colliders(), 20, 38), false);
-  assert.equal(blocksPoint(tent.colliders(), 29, 30), true);
-  assert.equal(blocksPoint(tent.colliders(), 20, 22), true);
+  assert.equal(blocksPoint(tent.colliders(), 20, 34), false);
+  assert.equal(blocksPoint(tent.colliders(), 24.5, 30), true);
+  assert.equal(blocksPoint(tent.colliders(), 20, 26), true);
   assert.equal(tent.isInside(tent.insidePosition.x, tent.insidePosition.z), true);
   assert.equal(blocksPoint(tent.colliders(), tent.insidePosition.x, tent.insidePosition.z), false);
-  assert.equal(blocksPoint(tent.colliders(), 20 - 18 * .29, 30 - 16 * .12), true);
+  assert.equal(blocksPoint(tent.colliders(), 20 - 9 * .29, 30 - 8 * .12), true);
   assert.equal(tent.isInside(tent.entrance.x, tent.entrance.z), false);
   tent.setDoor(false);
-  assert.equal(blocksPoint(tent.colliders(), 20, 38), true);
+  assert.equal(blocksPoint(tent.colliders(), 20, 34), true);
   tent.dispose(); assert.equal(scene.children.length, 0);
 });
 
@@ -49,7 +49,7 @@ test('every selectable tent type, size, color and material creates a complete in
     const config = { type, size, color: 'rust', material: 'ripstop' }, tent = createTent(scene, config, { x: 0, y: 0, z: 0 });
     assert.deepEqual(tent.config, config);
     assert.ok(tent.group.children.length > 30);
-    assert.ok(tent.dimensions.width >= 18);
+    assert.ok(tent.dimensions.width >= 9);
     assert.equal(tent.interiorTargets.length, 3);
     tent.setInterior(true); assert.equal(tent.shell.visible, true);
     tent.dispose();
@@ -65,8 +65,18 @@ test('rotated tent doorway and inside coordinates agree in world space', () => {
   assert.equal(tent.isInside(tent.insidePosition.x, tent.insidePosition.z), true);
   assert.equal(blocksPoint(tent.colliders(), tent.insidePosition.x, tent.insidePosition.z), false);
   assert.equal(tent.isInside(tent.entrance.x, tent.entrance.z), false);
-  assert.equal(blocksPoint(tent.colliders(), 108, 50), true);
+  assert.equal(blocksPoint(tent.colliders(), 104, 50), true);
   tent.setDoor(true);
-  assert.equal(blocksPoint(tent.colliders(), 108, 50), false);
+  assert.equal(blocksPoint(tent.colliders(), 104, 50), false);
   tent.dispose();
+});
+
+
+test('halved tent keeps a usable doorway for the largest camper collision capsule', async () => {
+  const {resolveMovement}=await import('../src/terrain.js');
+  const tent=createTent(new THREE.Scene(),DEFAULT_TENT,{x:0,y:0,z:0});
+  const start={x:0,z:6},delta={x:0,z:-4};
+  const closed=resolveMovement(start,delta,tent.colliders(),.55);assert.ok(closed.z>4.6);
+  tent.setDoor(true);const entered=resolveMovement(start,delta,tent.colliders(),.55);assert.ok(entered.z<3);
+  assert.ok(tent.dimensions.height>=3);tent.dispose();
 });

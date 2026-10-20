@@ -26,7 +26,7 @@ test('reproduced tree-1 position cannot be covered by a new campsite', () => {
   const oldCandidate = { x: player.x + 14, z: player.z, width: 18, depth: 16 };
   assert.equal(footprintClear(oldCandidate, [trunk]), false);
   const result = findCampLocation(player, { size: 'standard' }, [trunk]);
-  if (result) assert.equal(footprintClear({ ...result, width: 18, depth: 16 }, [trunk]), true);
+  if (result) assert.equal(footprintClear({ ...result, width: 9, depth: 8 }, [trunk]), true);
 });
 
 test('summit supports standard and family tents while the sign remains solid', () => {
@@ -35,13 +35,13 @@ test('summit supports standard and family tents while the sign remains solid', (
     const result = findCampLocation(SUMMIT, { size }, [sign]);
     assert.ok(result, size);
     assert.ok(result.y >= SUMMIT.height);
-    assert.equal(footprintClear({ ...result, width: 18 * scale, depth: 16 * scale }, [sign]), true);
+    assert.equal(footprintClear({ ...result, width: 9 * scale, depth: 8 * scale }, [sign]), true);
     assert.ok(Math.abs(result.y - terrainHeight(result.x, result.z)) < 1.6);
   }
 });
 
 test('camps cannot be placed in the sea, lake, outside the map or wholly blocked sites', () => {
-  assert.equal(findCampLocation({ x: 200, z: 0 }), null);
+  assert.equal(findCampLocation({ x: WORLD.landMaxX + 50, z: 0 }), null);
   assert.equal(findCampLocation({ x: LAKE.x, z: LAKE.z }), null);
   assert.equal(findCampLocation({ x: WORLD.minX - 50, z: 0 }), null);
   assert.equal(findCampLocation(SUMMIT, {}, [{ kind: 'box', minX: -200, maxX: -90, minZ: -250, maxZ: -140 }]), null);
