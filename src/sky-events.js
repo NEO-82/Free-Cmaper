@@ -10,13 +10,13 @@ export function flightPath(angle,offset=0,altitude=1200){
   }
   return {start:{x:cx+dx*near,y:altitude,z:cz+dz*near},end:{x:cx+dx*far,y:altitude,z:cz+dz*far},angle};
 }
-/** Reusable random schedule: 2–4 game hours between flights (mean 3), galaxies every 2–3 nights. */
+/** Reusable random schedule: 54–66 game minutes between flights (mean 1 hour), galaxies every 2–3 nights. */
 export function createSkySchedule(random=Math.random){
   const flights=[];let time=0;
   while(time<7*24*120){
-    time+=240+random()*240;
+    time+=108+random()*24;
     const angle=random()*TAU,offset=(random()-.5)*Math.min(WORLD.maxX-WORLD.minX,WORLD.maxZ-WORLD.minZ)*.45;
-    flights.push({at:time,duration:100+random()*35,...flightPath(angle,offset,1150+random()*220)});
+    flights.push({at:time,duration:45+random()*15,...flightPath(angle,offset,1150+random()*220)});
   }
   const galaxyNights=[];let night=1+Math.floor(random()*3);
   while(night<=7){galaxyNights.push(night);night+=2+Math.floor(random()*2);}

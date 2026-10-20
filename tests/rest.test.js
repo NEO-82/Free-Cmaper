@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {createCamper} from '../src/characters.js';
+import {createCamper,ANIMAL_SPECIES} from '../src/characters.js';
 import {restStep,poseBedRest} from '../src/rest.js';
 
 test('lying down bends into a seated pose before reclining face-up and putting the pack aside',()=>{
@@ -27,8 +27,8 @@ test('rest animation progresses continuously, reverses to get up, and freezes wh
 
 test('the larger head reclines face-up above the bedding and the first-person camera stays at its eyes',()=>{
   const model=createCamper(new THREE.Scene());model.root.position.y=.14;
-  for(const age of ['young','middle','older'])for(const gender of ['male','female']){
-    model.configure({age,gender});poseBedRest(model,1);model.root.updateMatrixWorld(true);
+  for(const species of ANIMAL_SPECIES){
+    model.configure({species});poseBedRest(model,1);model.root.updateMatrixWorld(true);
     const faceUp=new THREE.Vector3(0,0,1).transformDirection(model.head.matrixWorld);
     assert.ok(faceUp.y>.999);
     const eye=model.head.localToWorld(new THREE.Vector3(0,0,.58));

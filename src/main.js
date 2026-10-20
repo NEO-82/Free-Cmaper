@@ -1,3 +1,4 @@
+import { createMotorhomeInterior, INTERIOR_CHOICES, normalizeInterior } from './motorhome.js';
 import * as THREE from 'three';
 import { pathSurfaceHeight } from './paths.js';
 import { createSwimEffects } from './swim-effects.js';
@@ -17,8 +18,8 @@ import { createAudio } from './audio.js';
 import { createWorld } from './world.js';
 import { createAtmosphere, weatherTextures } from './atmosphere.js';
 import { poseBedRest, restStep, smoothRest } from './rest.js';
-import { createCamper, poseCamper } from './characters.js';
-import { outdoorCameraPosition } from './camera.js';
+import { createCamper, poseCamper, ANIMAL_SPECIES } from './characters.js';
+import { outdoorCameraPosition, zoomDistance, isFirstPerson, driverEye } from './camera.js';
 import { createWildlife, animateWildlife } from './wildlife.js';
 import { findCampLocation } from './placement.js';
 import { createShop, createTent } from './structures.js';
@@ -38,6 +39,9 @@ let tentConfig = { ...DEFAULT_TENT_CONFIG }, tentDraft = { ...DEFAULT_TENT_CONFI
 let contextAction = null, activeTool = null, lastHUD = 0;
 let threatSpawned = false, sceneDirty = true, simulationSeconds = 0;
 let person=null;
+let rvInside = false, rvRoom = null;
+let rvSettings = normalizeInterior();
+try { rvSettings = normalizeInterior(JSON.parse(localStorage.getItem('free-camper-rv'))); } catch {}
 let bedRest = null, phase = 'title', journeyOpen = false, mapOpen = false, mapWasPaused = false, vehicle = null, driving = false;
 let diveDepth = 0, selectedItem = 0, lastFootstep = 0, pauseChangedAt = -1000;
 let weatherProfile = sampleWeather(season);
@@ -56,7 +60,7 @@ app.innerHTML = `
 <div id="home" class="overlay hidden"><main class="home">
   <button id="prep-back" class="text-button" data-i18n="back"></button><div class="brand">FREE CAMPER / <span data-i18n="subtitle"></span></div>
   <h1 data-i18n="prepTitle"></h1><p data-i18n="prepNote"></p><span class="tag" data-i18n="prepStep"></span>
-  <h3 data-i18n="who"></h3><div class="row"><select id="age" data-label="age"><option value="young" data-i18n="young"></option><option value="middle" data-i18n="middle"></option><option value="older" data-i18n="older"></option></select><select id="gender" data-label="gender"><option value="male" data-i18n="male"></option><option value="female" data-i18n="female"></option></select><select id="body" data-label="body"><option value="normal" data-i18n="normal"></option><option value="large" data-i18n="large"></option><option value="slim" data-i18n="slim"></option></select></div>
+  <h3 data-i18n="who"></h3><div class="row"><label><span data-i18n="animalSpecies"></span><select id="species" data-label="animalSpecies">${ANIMAL_SPECIES.map(id=>`<option value="${id}" data-i18n="${id}"></option>`).join('')}</select></label></div>
   <h3 data-i18n="chooseSeason"></h3><div id="seasons" class="row">${seasonKeys.map((s, i) => `<button data-season="${i}" data-i18n="${s}" class="${i === 0 ? 'active' : ''}" aria-pressed="${i === 0}"></button>`).join('')}</div>
   <p class="note" data-i18n="homePrepareNote"></p><button id="begin-prep" class="primary depart" data-i18n="beginPrep"></button>
 </main></div>
@@ -147,6 +151,55 @@ for (let i = 0; i < 22; i++) {
 const homeScene = new THREE.Scene(); homeScene.background = new THREE.Color('#eadcc1');
 homeScene.add(new THREE.HemisphereLight('#fff4da','#b0b99a',2.5));
 const homeSun=new THREE.DirectionalLight('#ffe8be',2);homeSun.position.set(-3,6,5);homeScene.add(homeSun);
+const rvPanel = document.createElement('div');
+rvPanel.id='rv-controls'; rvPanel.className='hidden';
+rvPanel.innerHTML=Object.entries(INTERIOR_CHOICES).map(([key,values])=>`<label><span data-i18n="rv${key}">${t('rv'+key)}</span> <select id="rv-${key}">${values.map(v=>`<option data-i18n="rv${v}" value="${v}" ${rvSettings[key]===v?'selected':''}>${t('rv'+v)}</option>`).join('')}</select></label>`).join('');
+$('#pause-menu .dialog').append(rvPanel);
+const rvHeading=document.createElement('h3');rvHeading.id='rv-custom';rvHeading.className='hidden';rvHeading.dataset.i18n='rvCustom';rvHeading.textContent=t('rvCustom');rvPanel.before(rvHeading);
+rvPanel.addEventListener('change',()=>{
+  rvSettings=normalizeInterior(Object.fromEntries(Object.keys(INTERIOR_CHOICES).map(k=>[k,$('#rv-'+k).value])));
+  rvRoom.configure(rvSettings);sceneDirty=true;
+  try{localStorage.setItem('free-camper-rv',JSON.stringify(rvSettings));}catch{toast('saveUnavailable');}
+});
+function openRV(){
+  if(!vehicle||vehicle.state.kind!=='motorhome'||Math.abs(vehicle.state.speed)>.7)return;
+  rvRoom?.dispose();rvRoom=createMotorhomeInterior(rvSettings);rvInside=true;driving=false;yaw=0;pitch=.32;clearMovement();releaseMouse();sceneDirty=true;syncMenus();renderHUD();toast('rvWelcome');
+}
+function leaveRV(drive=false){
+  if(!rvInside)return;
+  if(!drive&&!dismountPosition(vehicle.state,allColliders().filter(c=>c.id!=='player-vehicle'))){toast('noDismount');return;}
+  rvInside=false;rvRoom.dispose();rvRoom=null;sceneDirty=true;
+  $('[data-i18n="menuHint"]').textContent=t('menuHint');
+  if(drive){cameraMode='outdoor';enterVehicle();}else exitVehicle();
+  syncMenus();renderHUD();
+}
+function interactRV(){
+  if(rvRoom.resting){rvRoom.toggleRest();sceneDirty=true;return;}
+  const item=rvRoom.nearest();if(!item)return;
+  if(item.id==='rvExit')leaveRV();
+  else if(item.id==='rvDrive')leaveRV(true);
+  else if(item.id==='rvBed'){rvRoom.toggleRest();audio.effect('open');}
+  else if(item.id==='rvCook'){if((inventory.get('food')??0)>0){inventory.set('food',inventory.get('food')-1);elapsed+=15;toast('rvMeal');audio.effect('collect');}else toast('rvNoFood');}
+  else if(item.id==='rvToilet'){elapsed+=5;toast('rvFresh');audio.effect('water');}
+  sceneDirty=true;
+}
+function renderRV(dt, realSeconds){
+  if(advancing()){
+    const v=new THREE.Vector3(Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),0,Number(keys.has('KeyS')||keys.has('ArrowDown'))-Number(keys.has('KeyW')||keys.has('ArrowUp')));
+    if(v.length())v.normalize().applyAxisAngle(new THREE.Vector3(0,1,0),yaw).multiplyScalar(dt*1.8);
+    rvRoom.move(v.x,v.z);elapsed+=realSeconds;simulationSeconds+=dt;
+    if(elapsed>=7*24*120){rvInside=false;rvRoom.dispose();rvRoom=null;finish();return;}
+  }
+  const p=rvRoom.position;
+  if(rvRoom.resting){camera.position.set(0,1.15,-2);camera.lookAt(Math.sin(yaw)*.5,2.9,-2+Math.cos(yaw)*.5);}
+  else{camera.position.set(p.x,1.8,p.z);camera.lookAt(p.x-Math.sin(yaw)*Math.cos(pitch-.32)*5,1.8-Math.sin(pitch-.32)*5,p.z-Math.cos(yaw)*Math.cos(pitch-.32)*5);}
+  renderer.render(rvRoom.scene,camera);
+  if(performance.now()-lastHUD>250){renderHUD();lastHUD=performance.now();}
+  $('[data-i18n="menuHint"]').textContent=t('rvMenuHint');
+  $('#status').textContent=t('rvInterior')+' · '+t(rvRoom.resting?'lyingBack':'stand');
+  $('#interaction-label').textContent=t(rvRoom.resting?'rvGetUp':rvRoom.nearest()?.id??'rvExplore');
+  $('#location-label').textContent=t('rvInterior');$('#journal').textContent=t('rvWelcome');$('#pause-badge').classList.toggle('hidden',advancing());
+}
 const homeRoom=createHome(homeScene);
 const homeCamera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,.08,100);
 const animals = createWildlife(scene);
@@ -172,8 +225,11 @@ function syncMenus() {
   $('#backpack-modal').classList.toggle('selectable', paused);
   document.body.classList.toggle('in-menu', paused);
   document.body.classList.toggle('at-home', phase==='home');
-  for(const id of ['camp','clean','protect','repel','shop-toggle','sleep']) $('#'+id).disabled=phase!=='world'||driving;
-  $('#open-map').disabled=phase!=='world';
+  for(const id of ['camp','clean','protect','repel','shop-toggle','sleep']) $('#'+id).disabled=phase!=='world'||driving||rvInside;
+  $('#open-map').disabled=phase!=='world'||rvInside;
+  $('#backpack-toggle').disabled=rvInside;
+  $('#rv-custom').classList.toggle('hidden', !rvInside);
+  $('#rv-controls').classList.toggle('hidden', !rvInside);
 }
 function setPaused(value) {
   paused = value; pauseChangedAt = performance.now(); clearMovement();
@@ -203,9 +259,9 @@ $('#options-close').onclick = () => closeModal('options');
 $('#backpack-close').onclick = () => closeModal('backpack');
 $('#shop-close').onclick = () => closeModal('shop');
 $('#backpack-toggle').onclick = () => { if (running && !optionsOpen) openModal('backpack'); };
-$('#start').onclick = () => { audio.unlock();phase='setup';homeScene.add(player);player.position.set(2.7,0,3.4);player.rotation.y=.15;camper.backpack.visible=false;sceneDirty=true;$('#title-screen').classList.add('hidden'); $('#home').classList.remove('hidden'); $('#age').focus(); };
+$('#start').onclick = () => { audio.unlock();phase='setup';homeScene.add(player);player.position.set(2.7,0,3.4);player.rotation.y=.15;camper.backpack.visible=false;sceneDirty=true;$('#title-screen').classList.add('hidden'); $('#home').classList.remove('hidden'); $('#species').focus(); };
 $('#begin-prep').onclick=()=>{phase='home';cameraMode='home';running=true;paused=false;player.position.set(HOME_START.x,0,HOME_START.z);person=createPerson(player.position);player.rotation.y=Math.PI;camper.backpack.visible=true;yaw=0;pitch=.32;$('#home').classList.add('hidden');$('#hud').classList.remove('hidden');document.activeElement?.blur();clearMovement();syncMenus();renderHUD();toast('homeWelcome');};
-for(const id of ['age','gender','body'])$('#'+id).addEventListener('change',()=>{camper.configure({age:$('#age').value,gender:$('#gender').value,bodyType:$('#body').value});camper.backpack.visible=false;sceneDirty=true;});
+$('#species').addEventListener('change',()=>{camper.configure({species:$('#species').value});camper.backpack.visible=false;sceneDirty=true;});
 $('#prep-back').onclick = () => { phase='title'; $('#home').classList.add('hidden'); $('#title-screen').classList.remove('hidden'); $('#start').focus(); };
 function syncOptions() {
   sceneDirty = true;
@@ -263,7 +319,7 @@ $('#depart').onclick = () => {
 };
 function drawMap(){worldMap.draw({player:player.position,vehicle:vehicle?.state,camp:camp?.group.position,heading:driving?vehicle.state.heading:player.rotation.y,t});$('#map-position').textContent=`${t('yourPosition')} ${Math.round(player.position.x)}, ${Math.round(player.position.z)} m`;}
 function toggleWorldMap(){
-  if(phase!=='world'||optionsOpen||shopOpen||journeyOpen)return;
+  if(rvInside||phase!=='world'||optionsOpen||shopOpen||journeyOpen)return;
   if(mapOpen){mapOpen=false;$('#world-map-modal').classList.add('hidden');setPaused(mapWasPaused);return;}
   if(backpackOpen)closeModal('backpack');mapWasPaused=paused;mapOpen=true;setPaused(true);drawMap();$('#world-map-modal').classList.remove('hidden');$('#world-map-close').focus();
 }
@@ -272,6 +328,7 @@ $('#world-map-close').onclick=toggleWorldMap;$('#open-map').onclick=toggleWorldM
 function hour() { return (5 + elapsed / 120) % 24; }
 function night() { return hour() < 6 || hour() >= 19; }
 function finish() {
+  rvInside=false;rvRoom?.dispose();rvRoom=null;
   running = false; clearMovement(); releaseMouse(); $('#shop-modal').classList.add('hidden'); shopOpen = false;
   $('#hud').classList.add('hidden'); $('#pause-menu').classList.add('hidden'); $('#backpack-modal').classList.add('hidden'); $('#options-modal').classList.add('hidden'); backpackOpen = optionsOpen = false; paused = false; syncMenus(); audio.setMode('calm');
   const el = document.createElement('div'); el.className = 'end';
@@ -305,16 +362,17 @@ addEventListener('keydown', e => {
     e.preventDefault(); const count = inventory.size; selectedItem = (selectedItem + (['ArrowLeft','ArrowUp'].includes(e.code) ? -1 : 1) + count) % Math.max(1,count); audio.effect('item'); renderBackpack(); return;
   }
   const editing = e.target.matches('input, select, textarea, [contenteditable="true"]');
-  if (e.code === 'KeyB' && running && !mapOpen && !journeyOpen && !driving && !optionsOpen && !shopOpen && !editing && !e.repeat) {
+  if (e.code === 'KeyB' && running && !mapOpen && !journeyOpen && !driving && !rvInside && !optionsOpen && !shopOpen && !editing && !e.repeat) {
     e.preventDefault(); if (backpackOpen) closeModal('backpack'); else openModal('backpack'); return;
   }
   if (!advancing() || editing || modal) return;
   if (gameCodes.includes(e.code)) e.preventDefault();
   keys.add(e.code);
+  if(rvInside){if(!e.repeat&&e.code==='KeyF')interactRV();return;}
   if (!e.repeat && e.code === 'KeyF') interact();
   if (!e.repeat && e.code === 'KeyC') setPosture('crouch');
   if (!e.repeat && e.code === 'KeyV') setPosture('prone');
-  if (!e.repeat && e.code === 'Space' && !driving && canJump({cameraMode,resting:!!bedRest,water:inWater(),posture,height:jumpHeight,grounded:person?.grounded??true}) && person && jumpPerson(person)) { jumpVelocity = person.vy; jumpHeight = 0.001; audio.effect('jump'); renderHUD(); }
+  if (!e.repeat && e.code === 'Space' && !driving && canJump({cameraMode,resting:!!bedRest,water:inWater(),posture,height:jumpHeight,grounded:person?.grounded??true}) && person && jumpPerson(person,{sprint:keys.has('ShiftLeft')&&!keys.has('ControlLeft')&&['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].some(key=>keys.has(key))})) { jumpVelocity = person.vy; jumpHeight = 0.001; audio.effect('jump'); renderHUD(); }
 });
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', clearMovement);
@@ -338,7 +396,7 @@ renderer.domElement.addEventListener('pointermove', e => {
 });
 renderer.domElement.addEventListener('pointerup', () => { touchPosition = null; mouseDragging = false; });
 renderer.domElement.addEventListener('pointercancel', () => { touchPosition = null; mouseDragging = false; });
-renderer.domElement.addEventListener('wheel', e => { if (advancing()) dist = THREE.MathUtils.clamp(dist + e.deltaY * 0.025, 4.5, 45); });
+renderer.domElement.addEventListener('wheel', e => { if (advancing()&&!rvInside) { e.preventDefault(); dist=zoomDistance(dist,e.deltaY,e.deltaMode);sceneDirty=true; } }, {passive:false});
 $('#camp').onclick = placeCamp;
 $('#clean').onclick = () => { if (!canAct()) return; if (!camp) { toast('needCamp'); return; } clean = true; toast('cleanDone'); renderHUD(); };
 $('#protect').onclick = () => { if (!canAct()) return; if (!camp) { toast('needCamp'); return; } if (!inventory.has('repellent')) { toast('needRepellent'); return; } protectedCamp = true; toast('protectDone'); };
@@ -377,19 +435,12 @@ function updateContext() {
     const d = flatDistance(point);
     if (d <= range) candidates.push({ kind, point, label, object, score: d + priority });
   };
-  if(vehicle&&cameraMode==='outdoor')add('enterVehicle',vehicle.root.position,vehicle.config.radius+2.2,'enterVehicle',vehicle,-3);
+  if(vehicle&&cameraMode==='outdoor')add('enterVehicle',vehicle.root.position,vehicle.config.radius+2.2,vehicle.state.kind==='motorhome'?'rvEnter':'enterVehicle',vehicle,-3);
   for(const stop of transit.targets)add('transit',stop.position,4,stop.id==='bus'?'busStop':'trainStation',stop,-1);
   add('shopDoor', shopBuilding.doorPosition, 3.5, shopBuilding.doorOpen ? 'closeDoor' : 'openDoor', shopBuilding, -1.2);
   if (cameraMode === 'shop') {
     add('owner', shopBuilding.ownerPosition, 5.6, 'tradeOwner', shopBuilding, -1);
     for (const item of shopBuilding.interiorTargets ?? []) add('shelf', item.position, 2.8, 'inspectShelf', item);
-  } else if(driving){
-    const orbitPitch=THREE.MathUtils.clamp(pitch,.12,1.3),back=vehicle.state.kind==='scooter'?10:14;
-    camera.position.set(vehicle.state.x+Math.sin(yaw)*back*Math.cos(orbitPitch),vehicle.root.position.y+3+Math.sin(orbitPitch)*back,vehicle.state.z+Math.cos(yaw)*back*Math.cos(orbitPitch));
-    const safe=outdoorCameraPosition({x:vehicle.state.x,y:vehicle.root.position.y+2.2,z:vehicle.state.z},camera.position,{trees:world.trees,rocks:world.rocks,groundHeight:terrainHeight});camera.position.set(safe.x,safe.y,safe.z);
-    const baseAim=Math.atan2(camera.position.y-vehicle.root.position.y-1.8,Math.hypot(camera.position.x-vehicle.state.x,camera.position.z-vehicle.state.z));
-    const aim=pitch<.12?baseAim+(pitch-.12)*(baseAim+1.54)/1.34:baseAim;
-    camera.lookAt(camera.position.x-Math.sin(yaw)*Math.cos(aim)*10,camera.position.y-Math.sin(aim)*10,camera.position.z-Math.cos(yaw)*Math.cos(aim)*10);
   } else if (cameraMode === 'tent') {
     add('tentDoor', camp.doorPosition, 3.5, camp.doorOpen ? 'closeTent' : 'openTent', camp, -1);
     for (const item of camp.interiorTargets) { const bed=item.id.startsWith('tent-bedding');add(bed ? 'bedding' : item.id === 'tent-backpack' ? 'backpack' : 'lantern', item.position, bed?2.4:2.7, bed?'lieInBed':item.id === 'tent-backpack'?'openBackpack':'toggleLantern', item, bed?-.7:0); }
@@ -403,12 +454,17 @@ function updateContext() {
       if (isWater(p.x, p.z)) { add('water', player.position, 1, 'fillWater'); break; }
     }
     for (const animal of animals) if (animal.visible) add('animal', animal.position, 3.5, 'observeAnimal', animal);
-    for (const animal of marine.creatures) add('marine', animal.position, 5, 'observeMarine', animal, -3);
+    for (const animal of marine.creatures) {
+      if(animal.userData.collected)continue;
+      const collectible=marine.harvestables.includes(animal);
+      if(collectible&&animal.position.distanceTo(player.position)>3.5)continue;
+      add(collectible?'seafood':'marine',animal.position,collectible?3.5:5,collectible?'collectSeafood':'observeMarine',animal,-3);
+    }
     for (const coral of marine.sites) add('marine', coral.position, 4.5, 'observeMarine', coral, -2);
   }
   candidates.sort((a, b) => a.score - b.score);
   contextAction = candidates[0] ?? { kind: 'ground', label: inventory.has('shovel') ? 'digGround' : 'inspectGround' };
-  $('#interaction-label').textContent = t(contextAction.label) + (contextAction.kind === 'tree' ? ` (${contextAction.object.hits}/3)` : '');
+  $('#interaction-label').textContent = t(contextAction.label) + (contextAction.kind === 'seafood'?` · ${t(contextAction.object.userData.kind)}`:contextAction.kind === 'tree' ? ` (${contextAction.object.hits}/3)` : '');
 }
 function addInventory(id, count = 1) { if (count > 0) audio.effect('collect'); inventory.set(id, (inventory.get(id) ?? 0) + count); }
 function toggleBedRest(bed) {
@@ -436,7 +492,7 @@ function interact() {
   if(action.kind==='packGear'){if(homeRoom.pack(action.object.id)){addInventory(action.object.id);toast('gearPacked');}renderHUD();return;}
   if(action.kind==='homeDoor'){openJourney();return;}
   if(action.kind==='homeHelp'){toast('homeWelcome');return;}
-  if(action.kind==='enterVehicle'){enterVehicle();return;}
+  if(action.kind==='enterVehicle'){if(vehicle.state.kind==='motorhome')openRV();else enterVehicle();return;}
   if(action.kind==='exitVehicle'){exitVehicle();return;}
   if(action.kind==='transit'){toast(action.object.id==='bus'?'busInfo':'trainInfo');return;}
   if (action.kind === 'getUp') { toggleBedRest();return; }
@@ -467,6 +523,8 @@ function interact() {
   } else if (action.kind === 'bedding') { toggleBedRest(action.object);
   } else if (action.kind === 'shelf') { toast('shelfHint');
   } else if (action.kind === 'animal') { toast('animalObserved');
+  } else if (action.kind === 'seafood') {
+    const result=marine.collect(action.object,player.position);if(result){addInventory(result.id,result.count);toast('seafoodCollected');renderHUD();}
   } else if (action.kind === 'marine') { audio.effect('item'); toast('marineObserved');
   } else if (action.kind === 'ground' && inventory.has('shovel')) {
     audio.effect('dig'); activeTool = 'shovel'; addInventory('soil'); toast('soilCollected');
@@ -529,7 +587,7 @@ $('#shop').onclick = e => {
   if (!inventory.has('repellent')) protectedCamp = false;
   renderShop(); renderHUD(); toast(result.tentConfig ? 'tentPurchased' : 'tradeDone');
 };
-const icons = { tent: '⛺', bedding: '▤', clothing: '♧', cookware: '♨', food: '◒', survival: '✚', tarp: '⌂', mat: '▥', winterBag: '▰', repellent: '☀', axe: '⚒', shovel: '♠', pickaxe: '⚒', rope: '∞', firewood: '▰', stone: '◆', soil: '▥', water: '◉' };
+const icons = { crab:'🦀', conch:'🐚', lobster:'🦞', tent: '⛺', bedding: '▤', clothing: '♧', cookware: '♨', food: '◒', survival: '✚', tarp: '⌂', mat: '▥', winterBag: '▰', repellent: '☀', axe: '⚒', shovel: '♠', pickaxe: '⚒', rope: '∞', firewood: '▰', stone: '◆', soil: '▥', water: '◉' };
 function renderBackpack() {
   $('#backpack-items').innerHTML = inventory.size ? [...inventory].filter(([, count]) => count > 0).map(([id, count],i) => `<button class="inventory-card ${i === selectedItem ? 'selected' : ''}" data-item-index="${i}" ${paused ? '' : 'tabindex="-1"'}><span class="item-icon" aria-hidden="true">${icons[id] ?? '◇'}</span><span><strong>${t(id)}</strong><small>×${count}</small></span></button>`).join('') : `<p>${t('empty')}</p>`;
   const card = $('#backpack-items .selected'); if (card) $('#backpack-items').scrollTop = Math.max(0, card.offsetTop - $('#backpack-items').offsetTop - 70);
@@ -546,7 +604,7 @@ function renderHUD() {
   $('#weather').textContent = `${t(seasonKeys[season])} · ${t(weather)} · ${t(night() ? 'night' : 'day')}`;
   $('#balance').textContent = `₩ ${money.toLocaleString()}`;
   const state = driving ? 'driving' : phase==='home'?'homeState':inWater() ? (diveDepth > 1.1 ? 'underwater' : 'swimming') : bedRest ? (bedRest.target===0?'gettingUp':bedRest.progress===1?'lyingBack':'lyingDown') : jumpHeight > 0 ? 'airborne' : posture === 'crouch' ? 'crouched' : posture === 'prone' ? 'proneState' : displayPosture() === 'sneak' ? 'sneaking' : displayPosture() === 'run' ? 'runningState' : 'stand';
-  $('#status').textContent = `${t(danger ? 'danger' : 'safe')} · ${t(state)} · ${t(cameraMode === 'home'?'homeState':cameraMode === 'tent' ? 'firstPerson' : cameraMode === 'shop' ? 'shoulderView' : 'outdoorView')}`;
+  $('#status').textContent = `${t(danger ? 'danger' : 'safe')} · ${t(state)} · ${t(isFirstPerson(dist)?'zoomFirstPerson':cameraMode === 'home'?'homeState':cameraMode === 'tent' ? 'firstPerson' : cameraMode === 'shop' ? 'shoulderView' : 'outdoorView')}`;
   $('#missions').innerHTML = phase==='home'?HOME_GEAR.map(id=>`${inventory.has(id)?'✓':'○'} ${t(id)}`).join('<br>'): `${camp ? '✓' : '○'} ${t('campGoal')}<br>${treeCount ? '✓' : '○'} ${t('treeGoal')}<br>${visited.has('summit') ? '✓' : '○'} ${t('summitGoal')}`;
   $('#journal').textContent = phase==='home'?t('homeWelcome'):driving?`${t(vehicle.state.kind)} · ${Math.round(Math.abs(vehicle.state.speed)*3.6)} km/h · ${t('driveHint')}`:t(season === 3 && !inventory.has('winterBag') ? 'winterTip' : weather === 'rain' && !inventory.has('tarp') ? 'rainTip' : 'peacefulTip');
   const pinAt = (element, x, z) => { element.style.left = `${(x - WORLD.minX) / (WORLD.maxX - WORLD.minX) * 100}%`; element.style.top = `${(z - WORLD.minZ) / (WORLD.maxZ - WORLD.minZ) * 100}%`; };
@@ -588,7 +646,7 @@ function stepGame(dt, now, realSeconds) {
   if(!driving&&!bedRest){
     person??=createPerson(player.position);
     person=stepPerson(person,{x:dir.x,z:dir.z,speed,posture,dive:keys.has('KeyQ'),rise:keys.has('Space')},dt,{
-      colliders:allColliders(),heightAt:currentFloor,waterAt:(x,z)=>!shopBuilding.isInside(x,z)&&!camp?.isInside(x,z)&&worldWaterAt(x,z),
+      colliders:[...allColliders(),...world.platformsNear(person.x,person.z)],heightAt:currentFloor,waterAt:(x,z)=>!shopBuilding.isInside(x,z)&&!camp?.isInside(x,z)&&worldWaterAt(x,z),
       ceilingAt:(x,z)=>shopBuilding.isInside(x,z)?shopBuilding.floorY+6.3:camp?.isInside(x,z)?camp.roofHeightAt(x,z):Infinity,
     });
     player.position.set(person.x,person.y,person.z);diveDepth=person.diveDepth;jumpVelocity=person.vy;jumpHeight=person.grounded||person.swimming?0:Math.max(.001,person.y-currentFloor());
@@ -657,9 +715,11 @@ function anchorBackpack(viewCamera){
 }
 function renderHome(){
   if(phase==='home'&&!advancing()&&!sceneDirty)return;sceneDirty=false;
-  const setup=phase==='setup',back=setup?5.7:backpackOpen?4:3.7;
+  const setup=phase==='setup',back=setup?5.7:backpackOpen?4:dist*.39;
+  player.visible=setup||backpackOpen||!isFirstPerson(dist);
   homeCamera.position.set(THREE.MathUtils.clamp(player.position.x+Math.sin(yaw)*back+Math.cos(yaw)*1.4,-7.1,7.1),player.position.y+(backpackOpen?4.6:4.25)+Math.sin(pitch-.32),THREE.MathUtils.clamp(player.position.z+Math.cos(yaw)*back-Math.sin(yaw)*1.4,-6.1,6.1));
-  if(setup){homeCamera.position.set(3.9,3.3,6.1);homeCamera.lookAt(2.7,1.55,2.8);}
+  if(setup){homeCamera.position.set(3.9,3.3,6.1);homeCamera.lookAt(1.2,1.55,2.8);}
+  else if(isFirstPerson(dist)&&!backpackOpen){homeCamera.position.set(player.position.x,player.position.y+2.1,player.position.z);homeCamera.lookAt(player.position.x-Math.sin(yaw)*5,player.position.y+2.1-Math.sin(pitch-.32)*5,player.position.z-Math.cos(yaw)*5);}
   else if(backpackOpen)homeCamera.lookAt(player.position.x,player.position.y+2.6,player.position.z);
   else homeCamera.lookAt(player.position.x-Math.sin(yaw)*2,player.position.y+1.25-Math.sin(pitch-.32)*4,player.position.z-Math.cos(yaw)*2);
   if(backpackOpen)anchorBackpack(homeCamera);renderer.render(homeScene,homeCamera);
@@ -669,6 +729,7 @@ function animate(now) {
   requestAnimationFrame(animate);
   const realSeconds = Math.max(0, (now - previous) / 1000);
   const dt = Math.min(realSeconds, 0.1); previous = now;
+  if(rvInside){renderRV(dt,realSeconds);return;}
   if (advancing()) {if(phase==='home')stepHome(dt,now);else stepGame(dt, now, realSeconds);}
   if(phase==='setup'||phase==='home'){renderHome();return;}
   if (!running) { renderer.render(titleScene, titleCamera); return; }
@@ -693,13 +754,22 @@ function animate(now) {
     const torso=player.position.clone().add(new THREE.Vector3(0,.9,-1.2).applyAxisAngle(new THREE.Vector3(0,1,0),camp.group.rotation.y));
     torso.lerpVectors(bedRest.viewStart,torso,THREE.MathUtils.smoothstep(bedRest.progress,0,.2));
     camera.lookAt(torso.lerp(skyTarget,settle));player.visible=bedRest.progress>.12&&settle<.78;
+  } else if(driving&&isFirstPerson(dist)){
+    const eye=driverEye(vehicle.state.kind);
+    camera.position.copy(vehicle.root.localToWorld(new THREE.Vector3(eye.x,eye.y,eye.z)));
+    camera.lookAt(camera.position.x-Math.sin(yaw)*Math.cos(pitch-.32)*10,camera.position.y-Math.sin(pitch-.32)*10,camera.position.z-Math.cos(yaw)*Math.cos(pitch-.32)*10);
+    player.visible=false;
   } else if(driving){
-    const orbitPitch=THREE.MathUtils.clamp(pitch,.12,1.3),back=vehicle.state.kind==='scooter'?10:14;
+    const orbitPitch=THREE.MathUtils.clamp(pitch,.12,1.3),back=dist*(vehicle.state.kind==='scooter'?1.05:1.47);
     camera.position.set(vehicle.state.x+Math.sin(yaw)*back*Math.cos(orbitPitch),vehicle.root.position.y+3+Math.sin(orbitPitch)*back,vehicle.state.z+Math.cos(yaw)*back*Math.cos(orbitPitch));
     const safe=outdoorCameraPosition({x:vehicle.state.x,y:vehicle.root.position.y+2.2,z:vehicle.state.z},camera.position,{trees:world.trees,rocks:world.rocks,groundHeight:terrainHeight});camera.position.set(safe.x,safe.y,safe.z);
     const baseAim=Math.atan2(camera.position.y-vehicle.root.position.y-1.8,Math.hypot(camera.position.x-vehicle.state.x,camera.position.z-vehicle.state.z));
     const aim=pitch<.12?baseAim+(pitch-.12)*(baseAim+1.54)/1.34:baseAim;
     camera.lookAt(camera.position.x-Math.sin(yaw)*Math.cos(aim)*10,camera.position.y-Math.sin(aim)*10,camera.position.z-Math.cos(yaw)*Math.cos(aim)*10);
+  } else if(isFirstPerson(dist)){
+    camera.position.set(player.position.x,player.position.y+eye,player.position.z);
+    camera.lookAt(camera.position.x-Math.sin(yaw)*Math.cos(pitch-.32)*10,camera.position.y-Math.sin(pitch-.32)*10,camera.position.z-Math.cos(yaw)*Math.cos(pitch-.32)*10);
+    player.visible=false;
   } else if (cameraMode === 'tent' || (inWater() && diveDepth > 1.1)) {
     camera.position.set(player.position.x, player.position.y + eye, player.position.z);
     camera.lookAt(camera.position.x - Math.sin(yaw) * Math.cos(pitch-.32) * 10, camera.position.y - Math.sin(pitch-.32) * 10, camera.position.z - Math.cos(yaw) * Math.cos(pitch-.32) * 10);
@@ -746,7 +816,7 @@ addEventListener('resize', () => { sceneDirty = true;
 syncOptions(); localize(); requestAnimationFrame(animate);
 if (import.meta.env.DEV) {
   window.__camper = {
-    snapshot: () => ({ running, paused, phase, journeyOpen, mapOpen, driving, vehicle:vehicle?{...vehicle.state}:null, homeGear:homeRoom.gear.map(g=>({id:g.id,packed:g.packed,position:g.position.toArray()})), simulationSeconds, pose: displayPosture(), bodyRotation:camper.body.rotation.toArray(), bodyLean: camper.upperBody.rotation.x, jumpHeight,person:person?{...person}:null, bedRest:bedRest?{progress:bedRest.progress,target:bedRest.target,bed:bedRest.bed.id}:null, shopRoof:shopBuilding.roof.visible, shopCeiling:shopBuilding.ceiling.visible, indoorLights:shopBuilding.interiorLights.length, groundCover:world.groundCover.getState(), backpackOpen, optionsOpen, shopOpen, weather, weatherProfile, atmosphere: atmosphere.getState?.(), skyEvents:atmosphere.getSkyState(), audio: audio.getState(), marine: marine.getState(), seaLife: marine.creatures.slice(0,8).map(g=>g.position.toArray()), diveDepth, inWater: inWater(), cameraY: camera.position.y, viewDirection: camera.getWorldDirection(new THREE.Vector3()).toArray(), world: WORLD, scenery: scenery.bounds, cameraMode, elapsed, money, inventory: Object.fromEntries(inventory), player: player.position.toArray(), yaw, pitch, tentConfig: { ...tentConfig }, treeCount, shopDoor: shopBuilding.doorOpen, context: contextAction?.kind, trees: world.trees.map(({ id, x, z, hits, felled }) => ({ id, x, z, hits, felled })), camp: camp ? { position: camp.group.position.toArray(), entrance: camp.entrance.toArray(), inside: camp.insidePosition.toArray(), doorOpen: camp.doorOpen, bounds: camp.bounds,dimensions:camp.dimensions,beds:camp.interiorTargets.filter(i=>i.id.startsWith('tent-bedding')).map(i=>({id:i.id,position:i.position.toArray(),rest:i.restPosition.toArray(),eye:i.eyePosition.toArray()})) } : null }),
+    snapshot: () => ({ cameraDistance:dist, firstPerson:isFirstPerson(dist)||rvInside, cameraPosition:(phase==='home'||phase==='setup'?homeCamera:camera).position.toArray(), avatarVisible:player.visible, shoreWaves:world.shoreWaves.getState(), avatar:camper.settings, rvInside, rvSettings, rvPosition:rvRoom?.position.toArray(), rvResting:rvRoom?.resting, running, paused, phase, journeyOpen, mapOpen, driving, vehicle:vehicle?{...vehicle.state}:null, homeGear:homeRoom.gear.map(g=>({id:g.id,packed:g.packed,position:g.position.toArray()})), simulationSeconds, pose: displayPosture(), bodyRotation:camper.body.rotation.toArray(), bodyLean: camper.upperBody.rotation.x, jumpHeight,person:person?{...person}:null, bedRest:bedRest?{progress:bedRest.progress,target:bedRest.target,bed:bedRest.bed.id}:null, shopRoof:shopBuilding.roof.visible, shopCeiling:shopBuilding.ceiling.visible, indoorLights:shopBuilding.interiorLights.length, groundCover:world.groundCover.getState(), backpackOpen, optionsOpen, shopOpen, weather, weatherProfile, atmosphere: atmosphere.getState?.(), skyEvents:atmosphere.getSkyState(), audio: audio.getState(), marine: marine.getState(), harvestables:marine.harvestables.map(g=>({id:g.userData.id,kind:g.userData.kind,collected:g.userData.collected,position:g.position.toArray()})), seaLife: marine.creatures.slice(0,8).map(g=>g.position.toArray()), diveDepth, inWater: inWater(), cameraY: camera.position.y, viewDirection: camera.getWorldDirection(new THREE.Vector3()).toArray(), world: WORLD, scenery: scenery.bounds, cameraMode, elapsed, money, inventory: Object.fromEntries(inventory), player: player.position.toArray(), yaw, pitch, tentConfig: { ...tentConfig }, treeCount, shopDoor: shopBuilding.doorOpen, context: contextAction?.kind, nearbyPlatforms:world.platformsNear(player.position.x,player.position.z), trees: world.trees.map(({ id, x, z, y, h, radius, hits, felled }) => ({ id, x, z, y, h, radius, hits, felled })), camp: camp ? { position: camp.group.position.toArray(), entrance: camp.entrance.toArray(), inside: camp.insidePosition.toArray(), doorOpen: camp.doorOpen, bounds: camp.bounds,dimensions:camp.dimensions,beds:camp.interiorTargets.filter(i=>i.id.startsWith('tent-bedding')).map(i=>({id:i.id,position:i.position.toArray(),rest:i.restPosition.toArray(),eye:i.eyePosition.toArray()})) } : null }),
     setVehiclePosition(x,z,heading=0){if(vehicle){driving=false;vehicle.update({kind:vehicle.state.kind,x,z,heading,speed:0});sceneDirty=true;}},
     validateTrail(){
       const first=trailPoint(0),colliders=allColliders();let state=createPerson({...first,y:pathSurfaceHeight(first.x,first.z)}),length=0,previous=first;

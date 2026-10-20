@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { WORLD, terrainHeight } from './terrain.js';
 
+export const SEAFOOD = Object.freeze({
+  crab: Object.freeze({ category: 'ingredient', edibleWhenPrepared: true, name: 'crab' }),
+  conch: Object.freeze({ category: 'ingredient', edibleWhenPrepared: true, name: 'conch' }),
+  lobster: Object.freeze({ category: 'ingredient', edibleWhenPrepared: true, name: 'lobster' }),
+});
+
 /** Original little sea creatures; all assets and animation work offline. */
 export function createMarine(scene) {
   const root=new THREE.Group();root.name='Coastal ecosystem';scene.add(root);
@@ -30,7 +36,7 @@ export function createMarine(scene) {
     for(const side of [-1,1])part(g,sphere,dark,1.1,.1,side*.2,.055,.065,.04);
     g.position.set(x,-1.4,z);g.userData={kind:'turtle',home:g.position.clone(),phase:i};creatures.push(g);
   }
-  const pink=mat('#f1a5ba'),kelpMaterial=mat('#70bda1'),coralMaterial=mat('#e9b1a0');
+  const crabBlue=mat('#739eae'),pink=mat('#f1a5ba'),kelpMaterial=mat('#70bda1'),coralMaterial=mat('#e9b1a0');
   const sites=[];
   for(let i=0;i<170;i++){
     const x=i<12?WORLD.landMaxX+9+random()*38:WORLD.landMaxX+5+random()*(WORLD.maxX-WORLD.landMaxX-15),z=i<12?-20+random()*40:WORLD.minZ+15+random()*(WORLD.maxZ-WORLD.minZ-30);
@@ -44,18 +50,52 @@ export function createMarine(scene) {
   // Tiny beach crabs inhabit the sand rather than the deep sea.
   for(let i=0;i<14;i++){
     const g=new THREE.Group(),x=WORLD.landMaxX-24+random()*8,z=i===0?0:-200+random()*400;root.add(g);
-    part(g,sphere,pink,0,.2,0,.32,.17,.24);
+    part(g,sphere,crabBlue,0,.2,0,.42,.17,.28);
+    for(const side of [-1,1])for(let n=0;n<3;n++){const spike=part(g,cone,crabBlue,side*(.38+n*.04),.2,(n-1)*.13,.09,.18,.09);spike.rotation.z=side*Math.PI/2;}
     for(const side of [-1,1]){for(let n=0;n<3;n++){const leg=part(g,cone,pink,side*.35,.14,(n-1)*.16,.045,.35,.045);leg.rotation.z=side*.9;}part(g,sphere,pink,side*.37,.35,.22,.12,.12,.12);part(g,sphere,dark,side*.12,.4,.18,.045,.065,.045);}
     g.position.set(x,terrainHeight(x,z),z);g.userData={kind:'crab',home:g.position.clone(),phase:i};creatures.push(g);
   }
+  // Sea snails on the strand and lobsters in the shallow coastal seabed.
+  const shellMaterial=mat('#dbc49c'),shellStripe=mat('#ad795a'),lobsterMaterial=mat('#af785e');
+  for(let i=0;i<20;i++){
+    const g=new THREE.Group();root.add(g);
+    const x=WORLD.landMaxX-18+random()*8,z=i===0?5:-220+random()*440;
+    part(g,sphere,shellMaterial,0,.2,0,.3,.25,.25);
+    const tip=part(g,cone,shellMaterial,-.22,.3,0,.19,.5,.19);tip.rotation.z=-.8;
+    for(let n=0;n<4;n++)part(g,sphere,n%2?shellStripe:shellMaterial,.02-n*.07,.24+n*.04,.1,.2-n*.03,.17-n*.02,.16-n*.02);
+    part(g,sphere,dark,.23,.13,.05,.1,.07,.12);
+    g.position.set(x,terrainHeight(x,z),z);g.userData={kind:'conch',home:g.position.clone(),phase:i};creatures.push(g);
+  }
+  for(let i=0;i<16;i++){
+    const g=new THREE.Group();root.add(g);
+    const x=WORLD.landMaxX+4+random()*6,z=i===0?10:-220+random()*440;
+    part(g,sphere,lobsterMaterial,0,.18,0,.20,.17,.55);
+    for(let n=0;n<5;n++)part(g,sphere,lobsterMaterial,0,.17,-.30-n*.12,.22-n*.022,.13,.10);
+    for(const side of [-1,1]){
+      const claw=part(g,sphere,lobsterMaterial,side*.32,.20,.5,.17,.12,.28);claw.rotation.y=-side*.35;
+      part(g,cone,lobsterMaterial,side*.29,.20,.77,.09,.23,.07).rotation.x=Math.PI/2;
+      for(let n=0;n<4;n++){const leg=part(g,cone,lobsterMaterial,side*.29,.10,.18-n*.19,.035,.38,.035);leg.rotation.z=side*1.1;}
+      part(g,sphere,dark,side*.13,.34,.4,.04,.05,.04);
+      const antenna=part(g,cone,lobsterMaterial,side*.13,.35,.72,.015,.65,.015);antenna.rotation.x=1.15;antenna.rotation.z=side*.3;
+    }
+    g.position.set(x,terrainHeight(x,z)+.05,z);g.userData={kind:'lobster',home:g.position.clone(),phase:i};creatures.push(g);
+  }
+  const harvestables=creatures.filter(g=>SEAFOOD[g.userData.kind]);
+  for(const [index,g] of harvestables.entries()){g.userData.id=`seafood-${index}`;g.userData.collected=false;}
   const bubbleGeometry=new THREE.BufferGeometry(),bubbles=new Float32Array(240*3);
   for(let i=0;i<240;i++){bubbles[i*3]=WORLD.landMaxX+6+random()*70;bubbles[i*3+1]=-random()*7;bubbles[i*3+2]=-55+random()*110;}
   bubbleGeometry.setAttribute('position',new THREE.BufferAttribute(bubbles,3));
   const dots=new THREE.Points(bubbleGeometry,new THREE.PointsMaterial({color:'#dcffff',size:.07,transparent:true,opacity:.65,depthWrite:false}));root.add(dots);
   function update(dt,time,center={x:WORLD.landMaxX,z:0}){
-    for (const g of root.children) g.visible = g === dots ? center.x > WORLD.landMaxX-90 : Math.hypot(g.position.x-center.x,g.position.z-center.z)<145;
-    for(const g of creatures){const h=g.userData.home,a=time*.18+g.userData.phase;g.position.x=h.x+Math.sin(a)*(g.userData.kind==='crab'?.6:3);g.position.z=h.z+Math.cos(a)*2;g.position.y=h.y+Math.sin(a*2)*(g.userData.kind==='crab'?0:.15);g.rotation.y=-a;}
+    for (const g of root.children) g.visible = !g.userData.collected && (g === dots ? center.x > WORLD.landMaxX-90 : Math.hypot(g.position.x-center.x,g.position.z-center.z)<145);
+    for(const g of creatures){if(g.userData.collected)continue;const h=g.userData.home,a=time*.18+g.userData.phase;g.position.x=h.x+Math.sin(a)*(SEAFOOD[g.userData.kind]?(g.userData.kind==='conch'?0:.25):3);g.position.z=h.z+Math.cos(a)*(SEAFOOD[g.userData.kind]?(g.userData.kind==='conch'?0:.3):2);g.position.y=h.y+Math.sin(a*2)*(SEAFOOD[g.userData.kind]?0:.15);g.rotation.y=-a;}
     for(let i=0;i<240;i++){bubbles[i*3+1]+=dt*.3;if(bubbles[i*3+1]>-.1)bubbles[i*3+1]=-6;}bubbleGeometry.attributes.position.needsUpdate=true;
   }
-  return {root,creatures,sites,update,getState:()=>({fish:144,turtles:10,crabs:14,reefSites:170})};
+  function collect(target, player) {
+    if(!harvestables.includes(target)||target.userData.collected||!player)return null;
+    if(![player.x,player.y,player.z].every(Number.isFinite)||target.position.distanceTo(player)>3.5)return null;
+    target.userData.collected=true;target.visible=false;
+    return {id:target.userData.kind,count:1,category:'ingredient'};
+  }
+  return {root,creatures,sites,harvestables,collect,update,getState:()=>({fish:144,turtles:10,crabs:14,conches:20,lobsters:16,reefSites:170,available:harvestables.filter(g=>!g.userData.collected).length})};
 }

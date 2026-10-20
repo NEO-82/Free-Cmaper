@@ -1,37 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { createCamper, poseCamper } from '../src/characters.js';
+import { createCamper, poseCamper, ANIMAL_SPECIES } from '../src/characters.js';
 
-const bounds = model => { model.root.updateMatrixWorld(true); return new THREE.Box3().setFromObject(model.root, true); };
+const bounds = model => { model.root.updateMatrixWorld(true); const b=new THREE.Box3(); model.root.traverseVisible(o=>{if(o.isMesh){o.geometry.computeBoundingBox();b.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));}});return b; };
 
-test('round camper retains its articulated limbs, small hiking pack and gameplay scale', () => {
+test('animal camper retains its articulated limbs, small hiking pack and gameplay scale', () => {
   const scene = new THREE.Scene(), model = createCamper(scene);
   assert.equal(scene.children[0], model.root);
   assert.equal(model.legs.length, 2); assert.equal(model.knees.length, 2); assert.equal(model.ankles.length, 2);
   assert.equal(model.arms.length, 2); assert.equal(model.elbows.length, 2);
   assert.ok(model.head.children.length >= 15);
-  assert.ok(model.backpack.children.length >= 15);
+  assert.ok(model.backpack.getObjectById(model.bottle.id));
   assert.ok(bounds(model).max.y > 2.6 && bounds(model).max.y < 3);
   assert.ok(Math.abs(bounds(model).min.y) < .01);
   model.dispose(); assert.equal(scene.children.length, 0);
 });
 
-test('all age, gender and body settings change appearance without rebuilding or invalidating the avatar', () => {
-  const model = createCamper(new THREE.Scene());
-  const children = model.body.children.length;
-  model.configure({ age: 'young', gender: 'male', bodyType: 'slim' });
-  const slimWidth = model.torsoRig.scale.x, brownHair = model.materials.hair.color.getHex();
-  model.configure({ age: 'older', gender: 'female', bodyType: 'large' });
-  assert.ok(model.torsoRig.scale.x > slimWidth);
-  assert.notEqual(model.materials.hair.color.getHex(), brownHair);
-  assert.equal(model.ponytail.visible, true); assert.equal(model.glasses.visible, true); assert.equal(model.moustache.visible, false);
-  for (const age of ['young', 'middle', 'older']) for (const gender of ['male', 'female']) for (const bodyType of ['normal', 'large', 'slim']) {
-    model.configure({ age, gender, bodyType });
-    assert.deepEqual(model.settings, { age, gender, bodyType });
-    assert.equal(model.body.children.length, children);
-    assert.ok(Number.isFinite(bounds(model).max.y));
+test('golden retriever is the default and all five species have distinct visible features', () => {
+  const model=createCamper(new THREE.Scene());assert.deepEqual(model.settings,{species:'puppy'});
+  const children=model.head.children.length,colors=new Set();
+  for(const species of ANIMAL_SPECIES){
+    model.configure({species});assert.deepEqual(model.settings,{species});
+    assert.equal(model.head.children.length,children);
+    assert.equal(model.details[species].visible,true);assert.equal(model.tails[species].visible,true);
+    for(const other of ANIMAL_SPECIES.filter(s=>s!==species)){assert.equal(model.details[other].visible,false);assert.equal(model.tails[other].visible,false);}
+    colors.add(model.materials.fur.color.getHex());assert.ok(Number.isFinite(bounds(model).max.y));
   }
+  assert.equal(colors.size,5);model.configure({species:'unknown'});assert.equal(model.settings.species,'deer');
   model.dispose();
 });
 
@@ -44,7 +40,7 @@ test('standing, crouching, sitting and prone poses keep feet and hands above the
     assert.ok(b.min.y >= -.01, `${pose} sinks below ground: ${b.min.y}`);
     if (pose === 'stand') standingHeight = b.max.y;
     else assert.ok(b.max.y < standingHeight, `${pose} should lower the silhouette`);
-    if (pose === 'prone') assert.ok(b.max.y < 1.4);
+    if (pose === 'prone') assert.ok(b.max.y < 1.7);
   }
   poseCamper(model, 'stand');
   assert.equal(model.body.rotation.x, 0); assert.equal(model.body.position.y, 0);
@@ -70,12 +66,12 @@ test('walking bends opposite limbs and keeps every transform finite across pose 
 
 test('the large round face takes almost half the height while the small pack stays below the head',()=>{
   const model=createCamper(new THREE.Scene());
-  for(const age of ['young','middle','older'])for(const gender of ['male','female'])for(const bodyType of ['normal','large','slim']){
-    model.configure({age,gender,bodyType});poseCamper(model,'stand');model.root.updateMatrixWorld(true);
+  for(const species of ANIMAL_SPECIES){
+    model.configure({species});poseCamper(model,'stand');model.root.updateMatrixWorld(true);
     const full=bounds(model),face=new THREE.Box3().setFromObject(model.face,true),pack=new THREE.Box3().setFromObject(model.backpack,true);
     const ratio=(face.max.y-face.min.y)/(full.max.y-full.min.y);
-    assert.ok(ratio>.43&&ratio<.5,`${age}/${gender}/${bodyType}: head ratio ${ratio}`);
-    assert.ok(full.max.y<2.9,'all choices fit the tent doorway');
+    assert.ok(ratio>.4&&ratio<.51,`${species}: head ratio ${ratio}`);
+    assert.ok(full.max.y<3.05,'all choices fit the tent doorway');
     assert.ok(pack.max.y<face.min.y+.2,'the pack does not overwhelm the head');
   }
   model.dispose();

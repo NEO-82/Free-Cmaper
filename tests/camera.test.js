@@ -22,3 +22,12 @@ test('orbit camera stays above climbing terrain with finite positions', () => {
   assert.ok(result.y >= 9.65);
   assert.ok(Object.values(result).every(Number.isFinite));
 });
+
+test('wheel zoom reaches first person, restores third person and respects distance limits',async()=>{
+  const {zoomDistance,isFirstPerson,driverEye}=await import('../src/camera.js');
+  const near=zoomDistance(9.5,-1000);assert.equal(near,0);assert.ok(isFirstPerson(near));
+  const away=zoomDistance(near,200);assert.equal(away,5);assert.equal(isFirstPerson(away),false);
+  assert.equal(zoomDistance(40,2000),45);assert.equal(zoomDistance(9.5,-24,1),0);
+  for(const kind of ['sedan','suv','scooter','motorhome']){const eye=driverEye(kind);assert.ok(eye.y>2&&eye.y<3.1);assert.ok(Object.values(eye).every(Number.isFinite));}
+  assert.ok(driverEye('motorhome').z>driverEye('sedan').z);
+});

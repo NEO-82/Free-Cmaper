@@ -4,8 +4,8 @@ export { ARRIVAL };
 export const BUS_STOP = Object.freeze({ x: ARRIVAL.x - 20, z: ARRIVAL.z - 5 });
 export const TRAIN_STATION = Object.freeze({ x: ARRIVAL.x + 28, z: ARRIVAL.z - 28 });
 export const PARKING = Object.freeze({ x: ARRIVAL.x + 8, z: ARRIVAL.z + 18 });
-export const TRAVEL_CHOICES = Object.freeze(['bus', 'train', 'sedan', 'suv', 'scooter']);
-export const isPrivateVehicle = kind => ['sedan', 'suv', 'scooter'].includes(kind);
+export const TRAVEL_CHOICES = Object.freeze(['bus', 'train', 'sedan', 'suv', 'scooter', 'motorhome']);
+export const isPrivateVehicle = kind => ['sedan', 'suv', 'scooter', 'motorhome'].includes(kind);
 export function arrivalFor(kind) {
   if (kind === 'train') return { x: TRAIN_STATION.x - 8, z: TRAIN_STATION.z + 11 };
   if (kind === 'bus') return { x: BUS_STOP.x + 4, z: BUS_STOP.z + 7 };

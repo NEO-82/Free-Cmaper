@@ -27,3 +27,14 @@ export function outdoorCameraPosition(focus, desired, { trees = [], rocks = [], 
   point.y = Math.max(point.y, groundHeight(point.x, point.z) + 0.65);
   return point;
 }
+
+/** Pixel, line and page wheel deltas share the same bounded camera distance. */
+export function zoomDistance(distance, deltaY, deltaMode = 0) {
+  if (!Number.isFinite(distance) || !Number.isFinite(deltaY)) return Number.isFinite(distance) ? distance : 9.5;
+  const pixels = deltaY * (deltaMode === 1 ? 16 : deltaMode === 2 ? 800 : 1);
+  return Math.max(0, Math.min(45, distance + pixels * .025));
+}
+export const isFirstPerson = distance => distance <= .5;
+export function driverEye(kind) {
+  return kind === 'motorhome' ? {x:-.55,y:2.9,z:2.7} : kind === 'scooter' ? {x:0,y:2.5,z:-.2} : {x:-.55,y:2.65,z:.65};
+}

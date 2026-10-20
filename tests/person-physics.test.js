@@ -8,12 +8,12 @@ function simulate(state,input,seconds,env=flat){for(let i=0;i<seconds*120;i++)st
 test('jump has world-space momentum and gravity, lands without sinking, and cannot jump again in midair',()=>{
   let p=createPerson({x:0,y:0,z:0});assert.equal(jumpPerson(p),true);assert.equal(jumpPerson(p),false);
   let peak=0;for(let i=0;i<180;i++){p=stepPerson(p,{x:1,z:0,speed:8},1/120,flat);peak=Math.max(peak,p.y);}
-  assert.ok(peak>2&&peak<2.2);assert.ok(p.x>7);assert.equal(p.y,0);assert.equal(p.grounded,true);
+  assert.ok(peak>4.2&&peak<4.4);assert.ok(p.x>7);assert.equal(p.y,0);assert.equal(p.grounded,true);
   const held=stepPerson(p,{},0,flat);assert.deepEqual(held,p);
 });
 test('jump clears a low obstacle while tall walls still block a sprint-sized movement',()=>{
   const low={kind:'box',id:'low-rock',minX:0,maxX:1,minZ:-2,maxZ:2,minY:0,maxY:.9};
-  let p=createPerson({x:-3,y:0,z:0});p.vx=8;jumpPerson(p);p=simulate(p,{x:1,z:0,speed:8},1.3,{...flat,colliders:[low]});assert.ok(p.x>2);assert.equal(p.grounded,true);
+  let p=createPerson({x:-3,y:0,z:0});p.vx=8;jumpPerson(p);p=simulate(p,{x:1,z:0,speed:8},1.8,{...flat,colliders:[low]});assert.ok(p.x>2);assert.equal(p.grounded,true);
   const tall={...low,maxY:8};p=createPerson({x:-3,y:0,z:0});p.vx=24;jumpPerson(p);p=simulate(p,{x:1,z:0,speed:24},1.5,{...flat,colliders:[tall]});assert.ok(p.x<=-PERSON.radius+.01);
 });
 test('feet land on a platform and fall continuously after walking off it; ceilings stop upward motion',()=>{
@@ -46,4 +46,17 @@ test('the entire new curling trail has a gentle grade across its usable width an
     assert.ok(Math.hypot(p.x-next.x,p.z-next.z)<.25,`blocked at trail segment ${i}`);previous=next;
   }
   assert.ok(length>1000);assert.ok(maxGrade<.3);assert.ok(Math.hypot(p.x-SUMMIT.x,p.z-SUMMIT.z)<.25);assert.equal(p.y,SUMMIT.height);
+});
+
+test('sprint takeoff adds about 20 percent height and range over the same running jump',()=>{
+  function flight(sprint){
+    let state=createPerson({x:0,y:0,z:0});state.vx=24;assert.ok(jumpPerson(state,{sprint}));
+    let peak=0;for(let i=0;i<360;i++){state=stepPerson(state,{x:1,z:0,speed:24},1/120,flat);peak=Math.max(peak,state.y);if(state.grounded)break;}
+    assert.ok(state.grounded);assert.equal(state.airSpeedScale,1);return {peak,distance:state.x};
+  }
+  const normal=flight(false),boost=flight(true);
+  assert.ok(Math.abs(boost.peak/normal.peak-1.2)<.015);
+  assert.ok(Math.abs(boost.distance/normal.distance-1.2)<.02);
+  const idle=createPerson({x:0,y:0,z:0});jumpPerson(idle,{sprint:true});assert.equal(idle.vy,PERSON.jumpSpeed);
+  const once={...idle};assert.equal(jumpPerson(idle,{sprint:true}),false);assert.deepEqual(idle,once);
 });

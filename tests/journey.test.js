@@ -19,9 +19,9 @@ test('all six supplies and the front door are reachable inside the real home wit
   home.dispose();assert.equal(scene.children.length,0);
 });
 
-test('all five transport modes arrive on safe ground at the western edge beside their transport',()=>{
+test('all six transport modes arrive on safe ground at the western edge beside their transport',()=>{
   const transit=createTransit(new THREE.Scene());
-  assert.equal(TRAVEL_CHOICES.length,5);
+  assert.equal(TRAVEL_CHOICES.length,6);
   for(const kind of TRAVEL_CHOICES){const p=arrivalFor(kind);assert.ok(p.x>WORLD.minX&&p.x<WORLD.minX+120);assert.ok(canOccupy(p.x,p.z,transit.colliders,.55));assert.equal(terrainHeight(p.x,p.z),2.5);assert.ok(journeyHours(kind)>=1);}
   assert.equal(isPrivateVehicle('bus'),false);assert.equal(isPrivateVehicle('train'),false);assert.equal(isPrivateVehicle('suv'),true);
   assert.ok(canOccupy(PARKING.x,PARKING.z,transit.colliders,3));

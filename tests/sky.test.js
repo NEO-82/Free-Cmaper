@@ -18,14 +18,15 @@ test('random flight directions cross from one world edge to another high above t
     assert.ok(Math.hypot(path.end.x-path.start.x,path.end.z-path.start.z)>2000);
   }
 });
-test('flight intervals vary between two and four game hours and average three; galaxy nights are separated',()=>{
+test('flight intervals vary around one game hour; galaxy nights are separated',()=>{
   const random=seeded();let total=0,count=0;
   for(let j=0;j<200;j++){
     const schedule=createSkySchedule(random);let previous=0;
-    for(const f of schedule.flights){const interval=f.at-previous;assert.ok(interval>=240&&interval<480);total+=interval;count++;previous=f.at;}
+    for(let i=1;i<schedule.flights.length;i++)assert.ok(schedule.flights[i-1].at+schedule.flights[i-1].duration+45<schedule.flights[i].at,'next plane starts after the previous contrail fades');
+    for(const f of schedule.flights){const interval=f.at-previous;assert.ok(interval>=108&&interval<132);total+=interval;count++;previous=f.at;}
     for(let i=1;i<schedule.galaxyNights.length;i++)assert.ok(schedule.galaxyNights[i]-schedule.galaxyNights[i-1]>=2);
   }
-  assert.ok(Math.abs(total/count-360)<3);
+  assert.ok(Math.abs(total/count-120)<.3);
 });
 test('a plane leaves a fading contrail and all sky event progress freezes at the same game time',()=>{
   const schedule=createSkySchedule(seeded()),f=schedule.flights[0];
@@ -48,7 +49,7 @@ test('sun and moon rise on opposite sides while galaxy, aurora and aircraft actu
   a.update(12,'clear',0,center,weatherState('clear',0),0);
   const sun=scene.getObjectByName('sun-disc'),moon=scene.getObjectByName('moon-disc');assert.equal(sun.visible,true);assert.equal(moon.visible,false);
   const flightAt=a.getSkyState().nextFlight;
-  a.update(12,'clear',flightAt+60,center,weatherState('clear',0),0);assert.equal(scene.getObjectByName('distant-airplane').visible,true);assert.ok(scene.getObjectByName('airplane-contrail').visible);
+  a.update(12,'clear',flightAt+20,center,weatherState('clear',0),0);assert.equal(scene.getObjectByName('distant-airplane').visible,true);assert.ok(scene.getObjectByName('airplane-contrail').visible);
   a.update(23,'clear',2160,center,weatherState('clear',0),3);assert.equal(sun.visible,false);assert.equal(moon.visible,true);assert.equal(scene.getObjectByName('winter-aurora').visible,true);
   const galaxyNight=a.getSkyState().galaxyNights[0];a.update(23,'clear',(galaxyNight-1)*2880+2160,center,weatherState('clear',0),3);assert.equal(scene.getObjectByName('milky-way').visible,true);
   a.update(23,'snow',2160,center,weatherState('snow'),3);assert.equal(scene.getObjectByName('winter-aurora').visible,false);assert.equal(scene.getObjectByName('milky-way').visible,false);assert.equal(moon.visible,false);

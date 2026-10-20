@@ -7,7 +7,7 @@ import { WORLD, canOccupy } from '../src/terrain.js';
 const initial=kind=>({kind,...PARKING,heading:Math.PI/2,speed:0});
 function advance(state,input,seconds,colliders=[]){for(let i=0;i<seconds*60;i++)state=stepDrive(state,input,1/60,colliders);return state;}
 
-test('sedan, SUV and scooter accelerate, reverse, steer and stop with the same WASD/brake inputs',()=>{
+test('all four vehicles accelerate, reverse, steer and stop with the same WASD/brake inputs',()=>{
   for(const kind of Object.keys(VEHICLES)){
     let state=advance(initial(kind),{forward:true},2);assert.ok(state.x>PARKING.x+5);assert.ok(state.speed>0);
     const heading=state.heading;state=advance(state,{forward:true,left:true},.5);assert.ok(state.heading>heading);
@@ -34,7 +34,7 @@ test('dismounts choose dry unobstructed ground or keep the driver inside if ever
   }
 });
 
-test('all three independently disposable models have grounded wheels and remain finite on terrain',()=>{
+test('all four independently disposable models have grounded wheels and remain finite on terrain',()=>{
   const scene=new THREE.Scene();
   for(const kind of Object.keys(VEHICLES)){
     const model=createVehicle(scene,kind,PARKING);assert.equal(model.wheels.length,kind==='scooter'?2:4);

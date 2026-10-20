@@ -5,9 +5,10 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { resolveMovement, terrainHeight, canOccupy, isWater } from './terrain.js';
 
 export const VEHICLES = Object.freeze({
-  sedan: Object.freeze({ maxSpeed: 32, acceleration: 9, brake: 15, turnRate: 1.45, radius: 2.8, wheelRadius: .55, length: 5.8, wheelBase:3.7, track:2.56, travel:.3 }),
-  suv: Object.freeze({ maxSpeed: 28, acceleration: 8, brake: 15, turnRate: 1.3, radius: 3, wheelRadius: .67, length: 6.2, wheelBase:4, track:2.74, travel:.44 }),
-  scooter: Object.freeze({ maxSpeed: 20, acceleration: 7, brake: 12, turnRate: 1.9, radius: 1.35, wheelRadius: .40, length: 2.8, wheelBase:1.84, track:0, travel:.20 }),
+  motorhome: Object.freeze({ maxSpeed: 48, acceleration: 12, brake: 28, turnRate: 1.05, radius: 4.2, wheelRadius: .65, length: 8, wheelBase: 5.1, track: 3.1, travel: .4 }),
+  sedan: Object.freeze({ maxSpeed: 64, acceleration: 18, brake: 30, turnRate: 1.45, radius: 2.8, wheelRadius: .55, length: 5.8, wheelBase:3.7, track:2.56, travel:.3 }),
+  suv: Object.freeze({ maxSpeed: 56, acceleration: 16, brake: 30, turnRate: 1.3, radius: 3, wheelRadius: .67, length: 6.2, wheelBase:4, track:2.74, travel:.44 }),
+  scooter: Object.freeze({ maxSpeed: 40, acceleration: 14, brake: 24, turnRate: 1.9, radius: 1.35, wheelRadius: .40, length: 2.8, wheelBase:1.84, track:0, travel:.20 }),
 });
 const approach = (v, target, step) => v < target ? Math.min(target, v + step) : Math.max(target, v - step);
 /** WASD drive: W/S forward/reverse, A/D steering, Space brake. No road constraint. */
@@ -22,7 +23,7 @@ export function stepDrive(state, input, dt, colliders = [], environment = {}) {
   const braking = input.brake || state.speed * target < 0;
   let speed = approach(state.speed, target, dt * (braking ? config.brake : throttle ? config.acceleration : 5));
   if(!input.brake&&!state.airborne)speed+=9.8*Math.sin(terrain.pitch)*dt;
-  if(input.brake&&Math.abs(speed)<config.brake*dt)speed=0;
+  if((input.brake&&Math.abs(speed)<config.brake*dt)||(!throttle&&Math.abs(speed)<.05))speed=0;
   const yawRate=steer*config.turnRate*Math.min(1,Math.abs(speed)/5)*Math.sign(speed)/(1+speed*speed/180);
   const heading = state.heading + yawRate*dt;
   const delta = { x: Math.sin(heading) * speed * dt, z: Math.cos(heading) * speed * dt };
@@ -57,7 +58,7 @@ export function createVehicle(parent, kind, origin, heading = 0, environment={})
   const scooter = kind === 'scooter', suv = kind === 'suv', color = scooter ? '#d9907f' : suv ? '#8eaf99' : '#e6bd73';
   const tyre = VEHICLES[kind].wheelRadius;
   for (const side of scooter ? [0] : [-1, 1]) for (const front of [-1, 1]) {
-    const pivot = new THREE.Group(); pivot.position.set(side * (suv ? 1.37 : 1.28), tyre, front * (scooter ? .92 : suv ? 2.0 : 1.85)); root.add(pivot);
+    const pivot = new THREE.Group(); pivot.position.set(side * VEHICLES[kind].track / 2, tyre, front * VEHICLES[kind].wheelBase / 2); root.add(pivot);
     const wheel = new THREE.Group(); pivot.add(wheel);
     const tire = part(new THREE.CylinderGeometry(tyre, tyre, scooter ? .20 : .40, 28), '#454944', 0, 0, 0); tire.rotation.z = Math.PI / 2; wheel.add(tire);
     const hub = part(new THREE.CylinderGeometry(tyre * .59, tyre * .59, scooter ? .22 : .43, 20), '#e5ddc8', 0, 0, 0); hub.rotation.z = Math.PI / 2; wheel.add(hub);
@@ -73,6 +74,27 @@ export function createVehicle(parent, kind, origin, heading = 0, environment={})
     part(new THREE.SphereGeometry(.20, 20, 14), '#fff2c4', 0, 1.85, 1.08).scale.set(1, 1, .4);
     for (const side of [-1, 1]) { const mirror = part(new THREE.SphereGeometry(.12, 16, 12), '#a6c9c1', side * .56, 2.38, .85); mirror.scale.z = .3; }
     box('#e6d9bf', 0, 1.1, -1.05, .54, .18, .14);
+  } else if (kind === 'motorhome') {
+    // Compact coachbuilt motorhome: over-cab bunk, habitation box and separate cab.
+    box('#52635c',0,.7,0,3.6,.4,8);
+    box('#eee7d5',0,2.35,-.9,3.8,3.25,6.1);
+    box('#74988d',0,1.25,-.9,3.84,.45,6.12);
+    box('#eee7d5',0,1.6,2.7,3.5,1.6,2.5);
+    box('#bad7d5',0,2.55,2.65,3.25,1.05,2.25,true);
+    box('#eee7d5',0,3.65,2.1,3.7,.9,3.4);
+    box('#c5d9d6',0,3.68,3.83,2.5,.42,.05,true);
+    for(const side of [-1,1]) {
+      for(const z of [-2.8,-.8])box('#8eafb4',side*1.92,2.65,z,.04,1.05,1.35,true);
+      box('#f6e8b5',side*1.15,1.45,4.01,.6,.3,.08);
+      box('#bd6c58',side*1.3,1.3,-3.99,.35,.5,.08);
+      box('#546b60',side*1.87,2.4,2.5,.25,.3,.45);
+    }
+    box('#d8cbb0',1.94,1.95,1.1,.1,2.3,.95);
+    box('#647e75',2.01,2.2,1.1,.04,.08,.25);
+    box('#566b60',2.1,.7,1.1,.6,.15,1.3);
+    box('#a6c6cb',0,4.03,-.9,1.2,.12,1.5,true);
+    box('#526e7d',0,4.02,-2.8,2.5,.09,1.1);
+    box('#52635c',0,.95,4.05,3.5,.22,.2);
   } else {
     const width = suv ? 3.1 : 2.95, length = VEHICLES[kind].length;
     box('#59665b', 0, .72, 0, width - .18, .44, length - .3);
@@ -113,7 +135,7 @@ export function createVehicle(parent, kind, origin, heading = 0, environment={})
       });
       wheels.forEach(w => w.rotation.x += state.speed * dt / tyre); frontWheels.forEach(w => w.rotation.y = steering * .35);
     },
-    collider() { return { kind: 'circle', x: state.x, z: state.z, radius: VEHICLES[kind].radius,minY:root.position.y,maxY:root.position.y+(scooter?2.5:3.7), id: 'player-vehicle' }; },
+    collider() { return { kind: 'circle', x: state.x, z: state.z, radius: VEHICLES[kind].radius,minY:root.position.y,maxY:root.position.y+(kind==='motorhome'?4.2:scooter?2.5:3.7), id: 'player-vehicle' }; },
     dispose() { root.removeFromParent(); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); },
   };
   model.update(state); return model;

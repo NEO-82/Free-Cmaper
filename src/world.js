@@ -1,3 +1,5 @@
+import { treePlatforms, rockSurface } from './climbing.js';
+import { createShoreWaves } from './shore-waves.js';
 import * as THREE from 'three';
 import { pathSurfaceHeight, pathUnderlayHeight, shopRoadPoint } from './paths.js';
 import { arrivalReserved, nearArrivalRoad, arrivalRoadPoint } from './journey.js';
@@ -122,12 +124,7 @@ export function createWorld(scene) {
   const sea = mesh(group, new THREE.PlaneGeometry(seaWidth, depth, 28, 60), waterMaterial, seaStart + seaWidth / 2, 0, (WORLD.minZ + WORLD.maxZ) / 2); sea.rotation.x = -Math.PI / 2; sea.castShadow = false;
   const lake = mesh(group, new THREE.CircleGeometry(1, 80), waterMaterial, LAKE.x, .1, LAKE.z); lake.rotation.x = -Math.PI / 2; lake.scale.set(LAKE.radiusX, LAKE.radiusZ, 1); lake.castShadow = false;
   const river = ribbon(Array.from({ length: 85 }, (_, i) => { const z = riverStart + i / 84 * (WORLD.maxZ - riverStart); return { x: riverX(z), y: .12, z }; }), 11, waterMaterial, group);
-  const foamMaterial = new THREE.MeshBasicMaterial({ color: '#d8fff0', transparent: true, opacity: .52, side: THREE.DoubleSide, depthWrite: false });
-  const shoreLines = [];
-  for (let n = 0; n < 3; n++) {
-    const pts = Array.from({ length: 190 }, (_, i) => ({ x: coastStart + 22 + n * 4 + Math.sin(i * .3) * .6, y: .14, z: WORLD.minZ + 1 + i / 189 * (depth - 2) }));
-    shoreLines.push(ribbon(pts, .25 + n * .15, foamMaterial, group));
-  }
+  const shoreWaves=createShoreWaves(group);
   const trailSamples = Array.from({ length: geography.TRAIL_SAMPLES+1 }, (_, i) => trailPoint(i / geography.TRAIL_SAMPLES));
   const trailMap = paintedTexture('trail', random);
   const trailMaterial = new THREE.MeshStandardMaterial({ color: '#e1c19a', map: trailMap, roughness: 1, side: THREE.DoubleSide });
@@ -143,7 +140,8 @@ export function createWorld(scene) {
   const trunkGeo = coloredGeometry(new THREE.CylinderGeometry(.62, 1, 1, 10, 3), '#ab8140', '#ffdc90');
   const branchGeo = new THREE.CylinderGeometry(.13, .25, 1, 6);
   const leafGeo = canopyGeometry(), pineGeo = canopyGeometry(true);
-  const TREE_COUNT = 3600, LEAF_LAYERS = 6, BRANCHES = 5;
+  const TREE_COUNT = 3600, LEAF_LAYERS = 6, BRANCHES = 5, CLIMB_STEPS = 9;
+  const climbGeo=new THREE.CylinderGeometry(1,1,1,12);
   const specifications = [{ x: -23, z: -8, radius: .72, h: 10.5, species: 1 }];
   // A readable, lush foreground around the trailhead, and equally dense new land.
   let attempts = 0;
@@ -176,6 +174,7 @@ export function createWorld(scene) {
     const { x, z, radius, h, species } = spec, y = terrainHeight(x, z), batch = batchByTile.get(spec.batchKey), index = batch.count++;
     const object = new THREE.Group(); object.position.set(x, y, z); object.userData.interaction = 'tree'; group.add(object);
     const tree = { ...spec, id: `tree-${trees.length}`, y, hits: 0, felled: false, object, stump: null, index, batch };
+    tree.platforms=treePlatforms(tree);
     const collider = { kind: 'circle', x, z, radius, minY:y, maxY:y+h, active: true, id: tree.id }; tree.collider = collider; colliders.push(collider); trees.push(tree);
     dummy.position.set(x, y + h * .34, z); dummy.rotation.set(0, Math.sin(index) * .14, Math.sin(index * 2) * .025); dummy.scale.set(radius, h * .68, radius); dummy.updateMatrix(); batch.trunk.setMatrixAt(index, dummy.matrix);
     for (let j = 0; j < BRANCHES; j++) {
@@ -192,11 +191,29 @@ export function createWorld(scene) {
     });
   }
   batches.forEach(b => { b.trunk.count = b.count; b.branches.count = b.count * BRANCHES; b.leaves.forEach(m => { m.count = b.count; }); [b.trunk, b.branches, ...b.leaves].forEach(m => { m.instanceMatrix.needsUpdate = true; m.computeBoundingSphere(); }); });
+  // A shared nearby pool keeps branch footholds inexpensive even in the dense forest.
+  const capacity=32*CLIMB_STEPS,ledges=new THREE.InstancedMesh(climbGeo,woodMaterial,capacity),boughs=new THREE.InstancedMesh(climbGeo,woodMaterial,capacity);
+  for(const m of [ledges,boughs]){m.count=0;m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);group.add(m);}
+  let climbDirty=true,lastClimbCenter={x:Infinity,z:Infinity};
+  function updateClimbView(center){
+    if(!climbDirty&&Math.hypot(center.x-lastClimbCenter.x,center.z-lastClimbCenter.z)<6)return;
+    climbDirty=false;lastClimbCenter={x:center.x,z:center.z};let index=0;
+    const nearby=trees.filter(t=>!t.felled&&Math.hypot(t.x-center.x,t.z-center.z)<45).sort((a,b)=>Math.hypot(a.x-center.x,a.z-center.z)-Math.hypot(b.x-center.x,b.z-center.z)).slice(0,32);
+    for(const tree of nearby)for(const p of tree.platforms){
+      dummy.position.set(p.x,p.maxY-.11,p.z);dummy.rotation.set(0,0,0);dummy.scale.set(p.radius,.22,p.radius);dummy.updateMatrix();ledges.setMatrixAt(index,dummy.matrix);
+      if(p.x!==tree.x){dummy.position.set((p.x+tree.x)/2,p.maxY-.24,p.z);dummy.rotation.set(0,0,Math.PI/2);dummy.scale.set(.18,p.x-tree.x,.18);dummy.updateMatrix();boughs.setMatrixAt(index,dummy.matrix);}
+      else boughs.setMatrixAt(index,hide);index++;
+    }
+    ledges.count=boughs.count=index;ledges.instanceMatrix.needsUpdate=boughs.instanceMatrix.needsUpdate=true;
+  }
+  updateClimbView(SHOP);
   function chopTree(tree) {
     if (!tree || tree.felled) return { felled: false, wood: 0, hits: tree?.hits ?? 0 };
     tree.hits++;
     if (tree.hits < 3) return { felled: false, wood: 0, hits: tree.hits };
     tree.felled = true; tree.collider.active = false;
+    tree.platforms.forEach(p=>p.active=false);
+    climbDirty=true;
     tree.batch.trunk.setMatrixAt(tree.index, hide); tree.batch.trunk.instanceMatrix.needsUpdate = true;
     for (let i = 0; i < BRANCHES; i++) tree.batch.branches.setMatrixAt(tree.index * BRANCHES + i, hide);
     tree.batch.branches.instanceMatrix.needsUpdate = true;
@@ -218,7 +235,7 @@ export function createWorld(scene) {
     const stone = mesh(group, rockGeo, rockMaterial, p.x, y + r * .4, p.z); stone.scale.set(r, r * .98, r * .88); stone.rotation.y = random() * Math.PI;
     const cap = mesh(stone, mossGeo, mossMaterial, -.05, .76, 0); cap.scale.set(.84, .16, .83);
     const rock = { id: `rock-${rocks.length}`, x: p.x, z: p.z, y, radius: r * .99, object: stone, mined: false };
-    rock.collider = { id: rock.id, kind: 'circle', x: p.x, z: p.z, radius: rock.radius, minY:y-.15, maxY:y+r*1.38, active: true }; rocks.push(rock); colliders.push(rock.collider);
+    rock.collider = { id: rock.id, kind: 'circle', x: p.x, z: p.z, radius: rock.radius, minY:y-.15, ...rockSurface(stone), active: true }; rocks.push(rock); colliders.push(rock.collider);
   }
   // A single draw call for thousands of sculpted tufts; local clusters make
   // the ground richly planted at actual walking scale, not only in a map view.
@@ -291,10 +308,10 @@ export function createWorld(scene) {
     flowerMaterial.color.set(['#fff0b5', '#ffedaf', '#edbe7b', '#f4f6f1'][index]);
   }
   updateSeason(0);
-  function animate(dt, time) {
-    waterTime.value = time; sea.position.y = Math.sin(time * .4) * .04;
-    shoreLines.forEach((line, i) => { line.position.x = Math.sin(time * .5 + i * .9) * .7; });
+  function animate(dt, time, center=SHOP) {
+    updateClimbView(center);
+    waterTime.value = time; shoreWaves.update(time);
     for (let i = falling.length - 1; i >= 0; i--) { const f = falling[i]; f.time += dt; f.object.rotation.z = Math.min(Math.PI * .48, f.time * f.time * .8) * f.direction; if (f.time > 3.2) { group.remove(f.object); falling.splice(i, 1); } }
   }
-  return { group, terrain, sea, lake, river, trees, rocks, groundCover, updateCover:groundCover.update, colliders, interactables, updateSeason, animate, chopTree, heightAt: terrainHeight };
+  return { group, terrain, shoreWaves, platformsNear(x,z){return trees.filter(t=>!t.felled&&Math.hypot(t.x-x,t.z-z)<8).flatMap(t=>t.platforms);}, sea, lake, river, trees, rocks, groundCover, updateCover:groundCover.update, colliders, interactables, updateSeason, animate, chopTree, heightAt: terrainHeight };
 }
