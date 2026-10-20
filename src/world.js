@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pathSurfaceHeight, pathUnderlayHeight, shopRoadPoint } from './paths.js';
 import { arrivalReserved, nearArrivalRoad, arrivalRoadPoint } from './journey.js';
 import { createGroundCover } from './groundcover.js';
 import * as geography from './terrain.js';
@@ -31,18 +32,18 @@ function mesh(parent, geometry, material, x, y, z) {
   const m = new THREE.Mesh(geometry, material); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
 }
 function ribbon(points, width, material, parent) {
-  const positions = [], uvs = [], indices = [];
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i], a = points[Math.max(0, i - 1)], b = points[Math.min(points.length - 1, i + 1)];
-    const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz) || 1;
-    for (const side of [-1, 1]) {
-      const x = p.x - dz / len * width / 2 * side, z = p.z + dx / len * width / 2 * side;
-      positions.push(x, p.y ?? terrainHeight(x, z) + .17, z); uvs.push(side === -1 ? 0 : 1, i / 4);
+  const positions = [], uvs = [], indices = [], across=Math.max(2,Math.ceil(width/.9/2)*2);
+  for(let i=0;i<points.length;i++){
+    const p=points[i],a=points[Math.max(0,i-1)],b=points[Math.min(points.length-1,i+1)];
+    const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz)||1;
+    for(let j=0;j<=across;j++){
+      const side=j/across-.5,x=p.x-dz/len*width*side,z=p.z+dx/len*width*side;
+      positions.push(x,p.y??pathSurfaceHeight(x,z),z);uvs.push(j/across,i/4);
+      if(i&&j<across){const k=i*(across+1)+j,prev=k-across-1;indices.push(prev,prev+1,k,prev+1,k+1,k);}
     }
-    if (i) { const k = i * 2; indices.push(k - 2, k - 1, k, k - 1, k + 1, k); }
   }
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); geo.setIndex(indices); geo.computeVertexNormals();
-  const m = mesh(parent, geo, material, 0, 0, 0); m.castShadow = false; return m;
+  const m = mesh(parent, geo, material, 0, 0, 0); m.castShadow = false;m.name=points.some(p=>p.y===undefined)?'walkable-path':'water-ribbon'; return m;
 }
 function coloredGeometry(geometry, lower, upper) {
   const p = geometry.attributes.position, colors = [], a = new THREE.Color(lower), b = new THREE.Color(upper), c = new THREE.Color();
@@ -100,7 +101,7 @@ export function createWorld(scene) {
   const terrain = new THREE.PlaneGeometry(width,depth,xs.length-1,zs.length-1);terrain.rotateX(-Math.PI/2);
   const vertices=terrain.attributes.position,uvs=terrain.attributes.uv,colors=new Float32Array(vertices.count*3);
   for(let i=0;i<vertices.count;i++){
-    const x=xs[i%xs.length],z=zs[Math.floor(i/xs.length)];vertices.setXYZ(i,x,terrainHeight(x,z),z);uvs.setXY(i,(x-WORLD.minX)/width,(WORLD.maxZ-z)/depth);
+    const x=xs[i%xs.length],z=zs[Math.floor(i/xs.length)];vertices.setXYZ(i,x,pathUnderlayHeight(x,z),z);uvs.setXY(i,(x-WORLD.minX)/width,(WORLD.maxZ-z)/depth);
   }
   terrain.setAttribute('color', new THREE.BufferAttribute(colors, 3)); terrain.computeVertexNormals();
   mesh(group, terrain, groundMaterial, 0, 0, 0).castShadow = false;
@@ -127,14 +128,14 @@ export function createWorld(scene) {
     const pts = Array.from({ length: 190 }, (_, i) => ({ x: coastStart + 22 + n * 4 + Math.sin(i * .3) * .6, y: .14, z: WORLD.minZ + 1 + i / 189 * (depth - 2) }));
     shoreLines.push(ribbon(pts, .25 + n * .15, foamMaterial, group));
   }
-  const trailSamples = Array.from({ length: 360 }, (_, i) => trailPoint(i / 359));
+  const trailSamples = Array.from({ length: geography.TRAIL_SAMPLES+1 }, (_, i) => trailPoint(i / geography.TRAIL_SAMPLES));
   const trailMap = paintedTexture('trail', random);
   const trailMaterial = new THREE.MeshStandardMaterial({ color: '#e1c19a', map: trailMap, roughness: 1, side: THREE.DoubleSide });
-  ribbon(trailSamples, 3.8, trailMaterial, group);
-  const shopTrail = Array.from({ length: 110 }, (_, i) => ({ x: SHOP.x + Math.sin(i / 24) * 3, z: -12 + i / 109 * (WORLD.maxZ + 11) }));
+  ribbon(trailSamples, geography.TRAIL_WIDTH, trailMaterial, group);
+  const shopTrail = Array.from({length:Math.ceil((WORLD.maxZ+11)/1.5)+1},(_,i)=>shopRoadPoint(i/Math.ceil((WORLD.maxZ+11)/1.5)));
   ribbon(shopTrail, 4.2, trailMaterial, group);
-  ribbon(Array.from({length:180},(_,i)=>arrivalRoadPoint(i/179)),9,trailMaterial,group);
-  function nearTrail(x, z) { return trailSurfaceAt(x,z).distance < 4.6; }
+  ribbon(Array.from({length:1001},(_,i)=>arrivalRoadPoint(i/1000)),9,trailMaterial,group);
+  function nearTrail(x, z) { return trailSurfaceAt(x,z).distance < geography.TRAIL_WIDTH/2+3.5; }
   const cliffSites = [{ x: -58, z: -37, r: 6.2 }, { x: -72, z: -45, r: 8.2 }, { x: -64, z: -59, r: 5.4 }];
   function reserved(x, z) {
     return arrivalReserved(x,z) || nearArrivalRoad(x,z,8) || isWater(x, z) || cliffSites.some(p => Math.hypot(x - p.x, z - p.z) < p.r + 3) || x > coastStart - 4 || (x > SHOP.x - 19 && x < SHOP.x + 19 && z > SHOP.z - 19 && z < SHOP.z + 17) || Math.hypot(x - SUMMIT.x, z - SUMMIT.z) < SUMMIT.radius + 5 || nearTrail(x, z) || Math.hypot(x - SHOP.x, z + 12) < 8;
@@ -175,7 +176,7 @@ export function createWorld(scene) {
     const { x, z, radius, h, species } = spec, y = terrainHeight(x, z), batch = batchByTile.get(spec.batchKey), index = batch.count++;
     const object = new THREE.Group(); object.position.set(x, y, z); object.userData.interaction = 'tree'; group.add(object);
     const tree = { ...spec, id: `tree-${trees.length}`, y, hits: 0, felled: false, object, stump: null, index, batch };
-    const collider = { kind: 'circle', x, z, radius, active: true, id: tree.id }; tree.collider = collider; colliders.push(collider); trees.push(tree);
+    const collider = { kind: 'circle', x, z, radius, minY:y, maxY:y+h, active: true, id: tree.id }; tree.collider = collider; colliders.push(collider); trees.push(tree);
     dummy.position.set(x, y + h * .34, z); dummy.rotation.set(0, Math.sin(index) * .14, Math.sin(index * 2) * .025); dummy.scale.set(radius, h * .68, radius); dummy.updateMatrix(); batch.trunk.setMatrixAt(index, dummy.matrix);
     for (let j = 0; j < BRANCHES; j++) {
       const a = j / BRANCHES * Math.PI * 2 + index;
@@ -217,7 +218,7 @@ export function createWorld(scene) {
     const stone = mesh(group, rockGeo, rockMaterial, p.x, y + r * .4, p.z); stone.scale.set(r, r * .98, r * .88); stone.rotation.y = random() * Math.PI;
     const cap = mesh(stone, mossGeo, mossMaterial, -.05, .76, 0); cap.scale.set(.84, .16, .83);
     const rock = { id: `rock-${rocks.length}`, x: p.x, z: p.z, y, radius: r * .99, object: stone, mined: false };
-    rock.collider = { id: rock.id, kind: 'circle', x: p.x, z: p.z, radius: rock.radius, active: true }; rocks.push(rock); colliders.push(rock.collider);
+    rock.collider = { id: rock.id, kind: 'circle', x: p.x, z: p.z, radius: rock.radius, minY:y-.15, maxY:y+r*1.38, active: true }; rocks.push(rock); colliders.push(rock.collider);
   }
   // A single draw call for thousands of sculpted tufts; local clusters make
   // the ground richly planted at actual walking scale, not only in a map view.

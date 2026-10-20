@@ -53,7 +53,7 @@ export function terrainHeight(x, z) {
     if (d < 1.15) h += shelf.height * (1-smooth(.68,1.02,d));
   }
   const path = trailSurfaceAt(x,z);
-  if (path.distance < 9) h = h * smooth(2.6,9,path.distance) + path.height * (1-smooth(2.6,9,path.distance));
+  if (path.distance < 18) h = h * smooth(6.5,18,path.distance) + path.height * (1-smooth(6.5,18,path.distance));
   // Blend into an exactly level 40 m wide summit, with no ledge to climb over.
   h = SUMMIT.height * (1 - smooth(20, 29, r)) + h * smooth(20, 29, r);
   const outsideShop = Math.hypot(Math.max(-46 - x, 0, x + 14), Math.max(-50 - z, 0, z + 18));
@@ -65,28 +65,31 @@ export function terrainHeight(x, z) {
   const coast = smooth(COAST_START, WORLD.landMaxX + 8, x);
   h = h * (1 - coast) - coast * 2.8;
   if (x >= WORLD.landMaxX) h = -3.5 - Math.min(5, (x - WORLD.landMaxX) * 0.025);
-  if (((x - LAKE.x) / LAKE.radiusX) ** 2 + ((z - LAKE.z) / LAKE.radiusZ) ** 2 < 1) h = -3;
-  if (z >= RIVER_START && Math.abs(x - riverX(z)) < 5.5) h = -2.4;
+  const lakeDistance=Math.hypot((x-LAKE.x)/LAKE.radiusX,(z-LAKE.z)/LAKE.radiusZ);
+  if(lakeDistance<1)h=-3+2.9*smooth(.89,1,lakeDistance);
+  else if(lakeDistance<1.08)h=-.1+(h+.1)*smooth(1,1.08,lakeDistance);
+  if(z>=RIVER_START){const bank=Math.abs(x-riverX(z));if(bank<5.5)h=-2.4+2.3*smooth(3.5,5.5,bank);else if(bank<10)h=-.1+(h+.1)*smooth(5.5,10,bank);}
   return h;
 }
-const trail = [
-  [-40, -56], [-78, -82], [-142, -90], [-185, -113],
-  [-188, -145], [-120, -161], [-96, -181], [-145, -195],
-];
+// A long curling approach trades the old steep climb for gentle, broad switchbacks.
+const trailStart={x:-40,z:-56},trailRadius=Math.hypot(trailStart.x-SUMMIT.x,trailStart.z-SUMMIT.z);
+const trailAngle=Math.atan2(trailStart.x-SUMMIT.x,trailStart.z-SUMMIT.z);
+export const TRAIL_WIDTH=10;
+export const TRAIL_SAMPLES=840;
 export function trailPoint(t) {
-  const u = clamp(t, 0, 1) * (trail.length - 1), segment = Math.min(trail.length - 2, Math.floor(u)), f = u - segment;
-  const p0 = trail[Math.max(0, segment - 1)], p1 = trail[segment], p2 = trail[segment + 1], p3 = trail[Math.min(trail.length - 1, segment + 2)];
-  const catmull = i => 0.5 * ((2 * p1[i]) + (-p0[i] + p2[i]) * f + (2 * p0[i] - 5 * p1[i] + 4 * p2[i] - p3[i]) * f * f + (-p0[i] + 3 * p1[i] - 3 * p2[i] + p3[i]) * f * f * f);
-  return { x: catmull(0), z: catmull(1) };
+  t=clamp(t,0,1);
+  const u=Math.min(1,t/.96),angle=trailAngle+Math.PI*3.5*u;
+  const radius=t<=.96?trailRadius+(18-trailRadius)*u:18*(1-(t-.96)/.04);
+  return {x:SUMMIT.x+Math.sin(angle)*radius,z:SUMMIT.z+Math.cos(angle)*radius};
 }
 // Index the switchback trail so height queries do not scan its entire length.
-const trailBuckets = new Map(), track = Array.from({length:281},(_,i)=>trailPoint(i/280));
+const trailBuckets = new Map(), track = Array.from({length:TRAIL_SAMPLES+1},(_,i)=>trailPoint(i/TRAIL_SAMPLES));
 let trackLength=0;
 for(let i=0;i<track.length;i++){ if(i)trackLength+=Math.hypot(track[i].x-track[i-1].x,track[i].z-track[i-1].z);track[i].distance=trackLength; }
 for(let i=1;i<track.length;i++) {
   const a=track[i-1], b=track[i], segment={a,b};
-  for(let gx=Math.floor((Math.min(a.x,b.x)-10)/16);gx<=Math.floor((Math.max(a.x,b.x)+10)/16);gx++)
-    for(let gz=Math.floor((Math.min(a.z,b.z)-10)/16);gz<=Math.floor((Math.max(a.z,b.z)+10)/16);gz++){
+  for(let gx=Math.floor((Math.min(a.x,b.x)-19)/16);gx<=Math.floor((Math.max(a.x,b.x)+19)/16);gx++)
+    for(let gz=Math.floor((Math.min(a.z,b.z)-19)/16);gz<=Math.floor((Math.max(a.z,b.z)+19)/16);gz++){
       const key=`${gx}:${gz}`;if(!trailBuckets.has(key))trailBuckets.set(key,[]);trailBuckets.get(key).push(segment);
     }
 }

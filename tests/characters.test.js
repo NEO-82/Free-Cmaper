@@ -80,3 +80,13 @@ test('the large round face takes almost half the height while the small pack sta
   }
   model.dispose();
 });
+
+test('swimming has a horizontal alternating stroke, a distinct idle tread and a face held above the water',()=>{
+  const model=createCamper(new THREE.Scene());
+  poseCamper(model,'swim',true,500,{swimBlend:1});const stroke=model.arms.map(a=>a.rotation.x);
+  assert.ok(model.body.rotation.x>1);assert.ok(Math.abs(stroke[0]-stroke[1])>.2);assert.ok(Math.abs(model.knees[0].rotation.x-model.knees[1].rotation.x)>.01);
+  model.root.updateMatrixWorld(true);const faceDirection=new THREE.Vector3(0,0,1).transformDirection(model.head.matrixWorld);assert.ok(faceDirection.z>.99);
+  poseCamper(model,'swim',false,500,{swimBlend:0});assert.ok(model.body.rotation.x<.25);
+  poseCamper(model,'swim',true,500,{swimBlend:1});assert.deepEqual(model.arms.map(a=>a.rotation.x),stroke,'the pose freezes at the same simulation time');
+  poseCamper(model,'stand');assert.equal(model.body.rotation.x,0);assert.equal(model.body.rotation.z,0);model.dispose();
+});

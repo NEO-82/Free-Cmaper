@@ -1,4 +1,4 @@
-import { WORLD, SHOP, SUMMIT, LAKE, terrainHeight, isWater, COAST_START } from './terrain.js';
+import { WORLD, SHOP, SUMMIT, LAKE, terrainHeight, isWater, COAST_START, trailPoint, TRAIL_SAMPLES } from './terrain.js';
 import { ARRIVAL, BUS_STOP, TRAIN_STATION, arrivalRoadPoint } from './journey.js';
 export function mapPoint(x, z, width, height) { return { x: (x - WORLD.minX) / (WORLD.maxX - WORLD.minX) * width, y: (z - WORLD.minZ) / (WORLD.maxZ - WORLD.minZ) * height }; }
 export function createWorldMap(canvas) {
@@ -15,6 +15,7 @@ export function createWorldMap(canvas) {
     const point = (x, z) => mapPoint(x, z, width, height);
     const road = Array.from({ length: 121 }, (_, i) => arrivalRoadPoint(i / 120));
     c.strokeStyle = '#f8e5b4'; c.lineWidth = 4; c.beginPath(); road.forEach((p, i) => { const a = point(p.x, p.z); if (!i) c.moveTo(a.x, a.y); else c.lineTo(a.x, a.y); }); c.stroke();
+    c.strokeStyle='#c69d6a';c.lineWidth=3;c.beginPath();for(let i=0;i<=TRAIL_SAMPLES;i++){const p=trailPoint(i/TRAIL_SAMPLES),a=point(p.x,p.z);if(!i)c.moveTo(a.x,a.y);else c.lineTo(a.x,a.y);}c.stroke();
     function marker(x, z, text, color = '#5b7057', dx = 10, dy = -10) {
       const p = point(x, z); c.fillStyle = color; c.strokeStyle = '#fff8df'; c.lineWidth = 2; c.beginPath(); c.arc(p.x, p.y, 5, 0, Math.PI * 2); c.fill(); c.stroke();
       c.font = 'bold 15px sans-serif'; c.lineWidth = 4; c.textAlign = dx < 0 ? 'right' : 'left'; c.strokeText(text, p.x + dx, p.y + dy); c.fillText(text, p.x + dx, p.y + dy);

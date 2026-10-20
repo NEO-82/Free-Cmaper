@@ -86,7 +86,8 @@ function worldPosition(origin, x, y, z) { return new THREE.Vector3(x, y, z).appl
 function localPosition(origin, x, z) { return new THREE.Vector3(x - origin.x, 0, z - origin.z).applyAxisAngle(new THREE.Vector3(0, 1, 0), -(origin.rotation || 0)); }
 function collider(origin, minX, maxX, minZ, maxZ, active = true, id = '') {
   const points = [[minX, minZ], [minX, maxZ], [maxX, minZ], [maxX, maxZ]].map(([x, z]) => worldPosition(origin, x, 0, z));
-  return { kind: 'box', minX: Math.min(...points.map(p => p.x)), maxX: Math.max(...points.map(p => p.x)), minZ: Math.min(...points.map(p => p.z)), maxZ: Math.max(...points.map(p => p.z)), active, id };
+  const heights={'shop-wall':6.8,'shop-door':4.2,'shop-door-open':4.2,'shop-shelf':4.6,'shop-counter':2.5,'shopkeeper':2.9,'shop-porch-post':6.5};
+  return { kind: 'box', minY:origin.y,maxY:origin.y+(heights[id]??Infinity), minX: Math.min(...points.map(p => p.x)), maxX: Math.max(...points.map(p => p.x)), minZ: Math.min(...points.map(p => p.z)), maxZ: Math.max(...points.map(p => p.z)), active, id };
 }
 function disposeGroup(group) {
   const geometries = new Set(), mats = new Set(), textures = new Set();

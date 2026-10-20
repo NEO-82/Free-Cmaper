@@ -43,3 +43,28 @@ test('all three independently disposable models have grounded wheels and remain 
   }
   assert.equal(scene.children.length,0);
 });
+
+test('four-wheel contacts tilt the whole car with both fore/aft and side-to-side slopes at every heading',async()=>{
+  const {sampleWheelGround,stepChassis}=await import('../src/vehicle-physics.js');
+  const plane=(x,z)=>.12*x+.18*z;
+  for(const kind of ['sedan','suv','scooter'])for(const heading of [0,.7,1.5,2.4]){
+    const config=VEHICLES[kind],state={kind,x:20,z:-20,heading,speed:0},ground=sampleWheelGround(state,config,plane);
+    const expectedPitch=-Math.atan(.12*Math.sin(heading)+.18*Math.cos(heading));
+    const expectedRoll=Math.atan(.12*Math.cos(heading)-.18*Math.sin(heading));
+    assert.ok(Math.abs(ground.pitch-expectedPitch)<1e-9);assert.ok(Math.abs(ground.roll-expectedRoll)<1e-9);
+    const model=createVehicle(new THREE.Scene(),kind,state,heading,{heightAt:plane});model.root.updateMatrixWorld(true);
+    assert.ok(Math.abs(model.root.rotation.x-expectedPitch)<1e-9);assert.ok(Math.abs(model.root.rotation.z-expectedRoll)<1e-9);
+    for(const wheel of model.wheels){const p=wheel.parent.getWorldPosition(new THREE.Vector3());assert.ok(Math.abs(p.y-config.wheelRadius-plane(p.x,p.z))<.04);}
+    model.dispose();
+  }
+});
+test('spring suspension settles after a bump and gravity makes the chassis fall over a crest',async()=>{
+  const {sampleWheelGround,stepChassis}=await import('../src/vehicle-physics.js');const config=VEHICLES.suv;
+  let state={speed:12,bodyY:0,pitch:0,roll:0};const bump=sampleWheelGround({x:0,z:0,heading:0},config,()=>.3);
+  state=stepChassis(state,bump,1/60,config);assert.ok(state.bodyY>0&&state.bodyY<.3);
+  for(let i=0;i<180;i++)state=stepChassis(state,bump,1/60,config);
+  assert.ok(Math.abs(state.bodyY-.3)<.001);
+  const drop=sampleWheelGround({x:0,z:0,heading:0},config,()=>-3);
+  state=stepChassis(state,drop,1/60,config);assert.equal(state.airborne,true);assert.ok(state.bodyY>0&&state.heaveVelocity<0);
+  for(let i=0;i<180;i++)state=stepChassis(state,drop,1/60,config);assert.equal(state.airborne,false);assert.ok(Math.abs(state.bodyY+3)<.01);
+});

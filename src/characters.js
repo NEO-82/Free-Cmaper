@@ -182,7 +182,7 @@ function roundBox() {
 }
 
 /** Articulated gameplay poses. Feet are at ground level in stand/sit/crouch. */
-export function poseCamper(model, pose, walking = false, now = 0) {
+export function poseCamper(model, pose, walking = false, now = 0, detail = {}) {
   const { body, upperBody, legs, knees, ankles, arms, elbows, head } = model;
   const wave = walking ? Math.sin(now * (pose === 'run' ? .013 : .008)) : 0;
   body.position.set(0, 0, 0); body.rotation.set(0, 0, 0);
@@ -191,9 +191,19 @@ export function poseCamper(model, pose, walking = false, now = 0) {
   legs.forEach((leg, i) => { leg.rotation.set(wave * (i ? -1 : 1) * .38, 0, 0); knees[i].rotation.set(Math.max(0, wave * (i ? 1 : -1)) * .38, 0, 0); });
   arms.forEach((arm, i) => { arm.rotation.set(wave * (i ? 1 : -1) * .35, 0, (i ? -1 : 1) * .055); elbows[i].rotation.set(-.10, 0, 0); });
   if (pose === 'swim') {
-    body.position.y = .3; upperBody.rotation.x = -.15;
-    legs.forEach((leg, i) => { leg.rotation.x = Math.sin(now*.005+i*Math.PI)*.35; knees[i].rotation.x=.4; });
-    arms.forEach((arm,i) => { arm.rotation.set(-.75 + Math.sin(now*.005+i*Math.PI)*.3,0,(i?-1:1)*.7); elbows[i].rotation.x=-.5; });
+    const amount=detail.swimBlend??(walking?1:0),cycle=now*.0055;
+    body.position.set(0,.06+.19*amount+Math.sin(cycle*2)*.025,-.35*amount);body.rotation.x=.18+.97*amount;
+    upperBody.rotation.x=-.06*amount;head.rotation.x=-(body.rotation.x+upperBody.rotation.x)*(detail.diving?.7:1);
+    body.rotation.z=Math.sin(cycle)*.045*amount;
+    legs.forEach((leg,i)=>{const kick=Math.sin(cycle*2+i*Math.PI);leg.rotation.set(kick*(.12+.20*amount),0,(i?-1:1)*(.08+.08*(1-amount)));knees[i].rotation.x=.22+Math.max(0,kick)*.32;});
+    arms.forEach((arm,i)=>{const phase=cycle+i*Math.PI;
+      arm.rotation.set((-.6+Math.cos(phase)*.25)*(1-amount)+(-1.4+Math.cos(phase)*1.05)*amount,0,(i?-1:1)*(.65+Math.sin(phase)*(.15+.18*amount)));
+      elbows[i].rotation.x=-.25-Math.max(0,Math.sin(phase))*(.15+.65*amount);
+    });
+  } else if(pose==='jump'){
+    const falling=(detail.verticalVelocity??0)<0;upperBody.rotation.x=.08;
+    legs.forEach((leg,i)=>{leg.rotation.x=falling?-.12:-(i?.45:.30);knees[i].rotation.x=falling?.3:(i?.8:.65);});
+    arms.forEach((arm,i)=>{arm.rotation.set(-.85,0,(i?-1:1)*.30);elbows[i].rotation.x=-.35;});
   } else if (pose === 'sneak') {
     body.position.y = -.06; upperBody.rotation.x = .17;
     legs.forEach((leg,i) => { leg.rotation.x = -.45 + wave * (i ? -.08 : .08); knees[i].rotation.x = .9; });

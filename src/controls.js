@@ -34,6 +34,6 @@ export function timeAdvances({ running, paused, backpackOpen, optionsOpen, hidde
   return running && !paused && !backpackOpen && !optionsOpen && !hidden;
 }
 
-export function canJump({cameraMode,resting=false,water=false,posture='stand',height=0}) {
-  return cameraMode!=='tent' && !resting && !water && posture==='stand' && height===0;
+export function canJump({cameraMode,resting=false,water=false,posture='stand',height=0,grounded=height===0}) {
+  return cameraMode!=='tent' && !resting && !water && posture==='stand' && height===0 && grounded;
 }

@@ -1,29 +1,37 @@
 import * as THREE from 'three';
+import { pathSurfaceHeight } from './paths.js';
+import { sampleWheelGround, stepChassis } from './vehicle-physics.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { resolveMovement, terrainHeight, canOccupy, isWater } from './terrain.js';
 
 export const VEHICLES = Object.freeze({
-  sedan: Object.freeze({ maxSpeed: 32, acceleration: 9, brake: 15, turnRate: 1.45, radius: 2.8, wheelRadius: .55, length: 5.8 }),
-  suv: Object.freeze({ maxSpeed: 28, acceleration: 8, brake: 15, turnRate: 1.3, radius: 3, wheelRadius: .67, length: 6.2 }),
-  scooter: Object.freeze({ maxSpeed: 20, acceleration: 7, brake: 12, turnRate: 1.9, radius: 1.35, wheelRadius: .40, length: 2.8 }),
+  sedan: Object.freeze({ maxSpeed: 32, acceleration: 9, brake: 15, turnRate: 1.45, radius: 2.8, wheelRadius: .55, length: 5.8, wheelBase:3.7, track:2.56, travel:.3 }),
+  suv: Object.freeze({ maxSpeed: 28, acceleration: 8, brake: 15, turnRate: 1.3, radius: 3, wheelRadius: .67, length: 6.2, wheelBase:4, track:2.74, travel:.44 }),
+  scooter: Object.freeze({ maxSpeed: 20, acceleration: 7, brake: 12, turnRate: 1.9, radius: 1.35, wheelRadius: .40, length: 2.8, wheelBase:1.84, track:0, travel:.20 }),
 });
 const approach = (v, target, step) => v < target ? Math.min(target, v + step) : Math.max(target, v - step);
 /** WASD drive: W/S forward/reverse, A/D steering, Space brake. No road constraint. */
-export function stepDrive(state, input, dt, colliders = []) {
+export function stepDrive(state, input, dt, colliders = [], environment = {}) {
   const config = VEHICLES[state.kind];
-  if (!config || !Number.isFinite(dt) || dt <= 0) return { ...state, blocked: false };
+  if (!config || !Number.isFinite(dt) || dt <= 0) return { ...state };
   dt = Math.min(dt, .1);
   const throttle = Number(!!input.forward) - Number(!!input.backward), steer = Number(!!input.left) - Number(!!input.right);
-  const target = input.brake ? 0 : throttle > 0 ? config.maxSpeed : throttle < 0 ? -config.maxSpeed * .4 : 0;
+  const heightAt=environment.heightAt??pathSurfaceHeight,terrain=sampleWheelGround(state,config,heightAt);
+  const uphill=Math.max(0,-Math.sin(terrain.pitch)*Math.sign(throttle||state.speed));
+  const target = input.brake ? 0 : throttle > 0 ? config.maxSpeed/(1+uphill*1.4) : throttle < 0 ? -config.maxSpeed*.4/(1+uphill*1.4) : 0;
   const braking = input.brake || state.speed * target < 0;
   let speed = approach(state.speed, target, dt * (braking ? config.brake : throttle ? config.acceleration : 5));
-  const heading = state.heading + steer * config.turnRate * Math.min(1, Math.abs(speed) / 5) * Math.sign(speed) * dt;
+  if(!input.brake&&!state.airborne)speed+=9.8*Math.sin(terrain.pitch)*dt;
+  if(input.brake&&Math.abs(speed)<config.brake*dt)speed=0;
+  const yawRate=steer*config.turnRate*Math.min(1,Math.abs(speed)/5)*Math.sign(speed)/(1+speed*speed/180);
+  const heading = state.heading + yawRate*dt;
   const delta = { x: Math.sin(heading) * speed * dt, z: Math.cos(heading) * speed * dt };
   const moved = resolveMovement(state, delta, colliders, config.radius);
   const desired = Math.hypot(delta.x, delta.z), actual = Math.hypot(moved.x - state.x, moved.z - state.z);
   const blocked = desired > .005 && actual < desired * .45;
   if (blocked) speed = 0;
-  return { ...state, ...moved, heading, speed, blocked };
+  const next={...state,...moved,heading,speed,blocked},ground=sampleWheelGround(next,config,heightAt);
+  return {...next,...stepChassis(next,ground,dt,config,{acceleration:(speed-state.speed)/dt,turnRate:yawRate})};
 }
 /** Find dry, unobstructed ground beside the stopped vehicle, never inside a wall or water. */
 export function dismountPosition(state, colliders = []) {
@@ -34,7 +42,7 @@ export function dismountPosition(state, colliders = []) {
   }
   return null;
 }
-export function createVehicle(parent, kind, origin, heading = 0) {
+export function createVehicle(parent, kind, origin, heading = 0, environment={}) {
   if (!VEHICLES[kind]) throw new Error('Unknown vehicle');
   const root = new THREE.Group(); root.name = `Camper ${kind}`; parent.add(root);
   const geometries = new Set(), materials = new Map(), wheels = [], frontWheels = [];
@@ -90,13 +98,22 @@ export function createVehicle(parent, kind, origin, heading = 0) {
   let state = { kind, x: origin.x, z: origin.z, heading, speed: 0, blocked: false };
   const model = { root, wheels, frontWheels, config: VEHICLES[kind], get state() { return state; },
     update(next, dt = 0, steering = 0) {
-      state = { ...next }; root.position.set(state.x, terrainHeight(state.x, state.z), state.z); root.rotation.y = state.heading;
-      // Small terrain lean follows slopes; the root remains upright enough for a clear driving view.
-      const dy = terrainHeight(state.x + Math.sin(state.heading) * 1.3, state.z + Math.cos(state.heading) * 1.3) - root.position.y;
-      root.rotation.x = Math.max(-.35, Math.min(.35, -Math.atan2(dy, 1.3)));
+      state = { ...next }; const ground=state.ground??sampleWheelGround(state,VEHICLES[kind],environment.heightAt??pathSurfaceHeight);
+      if(!Number.isFinite(state.bodyY))Object.assign(state,stepChassis(state,ground,0,VEHICLES[kind]));
+      root.position.set(state.x,state.bodyY,state.z);root.rotation.set(state.pitch,state.heading,state.roll,'YXZ');root.updateMatrixWorld(true);
+      const up=Math.max(.5,Math.cos(state.pitch)*Math.cos(state.roll));
+      const heightAt=environment.heightAt??pathSurfaceHeight;
+      wheels.forEach(wheel=>{const pivot=wheel.parent;let suspension=tyre;
+        for(let i=0;i<4;i++){
+          const point=new THREE.Vector3(pivot.position.x,suspension,pivot.position.z).applyQuaternion(root.quaternion).add(root.position);
+          suspension+=((heightAt(point.x,point.z)+tyre)-point.y)/up;
+          suspension=THREE.MathUtils.clamp(suspension,tyre-VEHICLES[kind].travel,tyre+VEHICLES[kind].travel);
+        }
+        pivot.position.y=suspension;
+      });
       wheels.forEach(w => w.rotation.x += state.speed * dt / tyre); frontWheels.forEach(w => w.rotation.y = steering * .35);
     },
-    collider() { return { kind: 'circle', x: state.x, z: state.z, radius: VEHICLES[kind].radius, id: 'player-vehicle' }; },
+    collider() { return { kind: 'circle', x: state.x, z: state.z, radius: VEHICLES[kind].radius,minY:root.position.y,maxY:root.position.y+(scooter?2.5:3.7), id: 'player-vehicle' }; },
     dispose() { root.removeFromParent(); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); },
   };
   model.update(state); return model;

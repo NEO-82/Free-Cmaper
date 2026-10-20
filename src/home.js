@@ -46,13 +46,13 @@ export function createHome(scene) {
   }
   box('#9b704b', -6.9, .9, 3.4, 1.0, 1.8, 3.8);
   box('#eee4cc', -6.8, 1.85, 3.4, 1.1, .12, 4);
-  colliders.push({ kind: 'box', minX: -7.5, maxX: -6.2, minZ: 1.4, maxZ: 5.5 });
+  colliders.push({ kind: 'box', minY:0,maxY:1.95, minX: -7.5, maxX: -6.2, minZ: 1.4, maxZ: 5.5 });
   box('#c4d3b1', 0, .03, 3.9, 4.6, .05, 2.5);
   const gear = HOME_GEAR.map((id, i) => {
     const x = [-5, 0, 5][i % 3], z = i < 3 ? -4 : .1;
     box('#b38a5b', x, .65, z, 2.1, 1.3, 1.25);
     box('#e2c18f', x, 1.34, z, 2.2, .13, 1.35);
-    colliders.push({ kind: 'box', minX: x - 1.1, maxX: x + 1.1, minZ: z - .68, maxZ: z + .68 });
+    colliders.push({ kind: 'box', minY:0,maxY:1.41, minX: x - 1.1, maxX: x + 1.1, minZ: z - .68, maxZ: z + .68 });
     const object = new THREE.Group(); group.add(object);
     const before = group.children.length;
     if (id === 'tent') {

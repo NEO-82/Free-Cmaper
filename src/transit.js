@@ -11,7 +11,7 @@ export function createTransit(parent) {
     const m = new THREE.Mesh(geo, materials.get(color)); m.position.set(x, terrainHeight(x, z) + y, z); m.castShadow = m.receiveShadow = true; group.add(m); return m;
   }
   const box = (c, x, y, z, w, h, d) => part(new RoundedBoxGeometry(w, h, d, 2, .08), c, x, y, z);
-  const block = (id, x, z, w, d) => colliders.push({ kind: 'box', id, minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
+  const block = (id, x, z, w, d) => colliders.push({ kind: 'box', id, minY:terrainHeight(x,z),maxY:terrainHeight(x,z)+(id.includes('bench')?1.0:4.6), minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
   function sign(text, x, y, z, width = 4) {
     const plane = box('#f7ecd1', x, y, z, width, 1, .12);
     if (typeof document !== 'undefined') {
