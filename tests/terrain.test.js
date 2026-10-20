@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WORLD, SHOP, SUMMIT, terrainHeight, isWater, trailPoint, resolveMovement } from '../src/terrain.js';
+import { WORLD, SHOP, SUMMIT, LAKE, terrainHeight, isWater, trailPoint, resolveMovement } from '../src/terrain.js';
 
 const close = (actual, expected, tolerance = 1e-6) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} should be close to ${expected}`);
 
-test('expanded map has approximately ten times the original area and an eastern sea', () => {
+test('expanded map has twice the previous area and keeps the eastern sea', () => {
   const area = (WORLD.maxX - WORLD.minX) * (WORLD.maxZ - WORLD.minZ);
-  assert.ok(area / (220 * 180) >= 9.9 && area / (220 * 180) <= 10.2);
+  assert.ok(area / (700 * 570) >= 1.99 && area / (700 * 570) <= 2.02);
   assert.ok((WORLD.maxX - WORLD.landMaxX) / (WORLD.maxX - WORLD.minX) > 0.3);
   assert.equal(isWater(WORLD.landMaxX + 15, 0), true);
   assert.equal(isWater(SHOP.x, SHOP.z), false);
@@ -23,8 +23,9 @@ test('mountain summit provides a genuinely flat campsite and shop grounds are le
 });
 
 test('terrain stays finite and has no discontinuous height jumps across nearby land samples', () => {
-  for (let x = -330; x < 100; x += 27) {
-    for (let z = -270; z < 270; z += 31) {
+  for (let x = WORLD.minX + 20; x < WORLD.landMaxX - 10; x += 27) {
+    for (let z = WORLD.minZ + 20; z < WORLD.maxZ - 20; z += 31) {
+      if (isWater(x, z) || isWater(x + 0.01, z) || isWater(x, z + 0.01)) continue;
       const h = terrainHeight(x, z);
       assert.ok(Number.isFinite(h), `finite terrain at ${x},${z}`);
       assert.ok(Math.abs(h - terrainHeight(x + 0.01, z)) < 0.5, `continuous X at ${x},${z}`);
@@ -83,7 +84,7 @@ test('world borders and water cannot be crossed by very large movement steps', (
   const ocean = resolveMovement({ x: 90, z: 0 }, { x: 500, z: 0 }, [], 0.55);
   assert.equal(isWater(ocean.x, ocean.z), false);
   assert.ok(ocean.x < WORLD.landMaxX);
-  const lake = resolveMovement({ x: -125, z: 130 }, { x: 0, z: 100 }, [], 0.55);
+  const lake = resolveMovement({ x: LAKE.x, z: LAKE.z - LAKE.radiusZ - 12 }, { x: 0, z: 100 }, [], 0.55);
   assert.equal(isWater(lake.x, lake.z), false);
-  assert.ok(lake.z < 170, 'cannot tunnel through the southern lake');
+  assert.ok(lake.z < LAKE.z - LAKE.radiusZ, 'cannot tunnel through the southern lake');
 });

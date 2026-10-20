@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { footprintClear, findCampLocation } from '../src/placement.js';
-import { SUMMIT, terrainHeight, isWater } from '../src/terrain.js';
+import { WORLD, LAKE, SUMMIT, terrainHeight, isWater } from '../src/terrain.js';
 
 const footprint = { x: 0, z: 0, width: 18, depth: 16 };
 
@@ -42,8 +42,8 @@ test('summit supports standard and family tents while the sign remains solid', (
 
 test('camps cannot be placed in the sea, lake, outside the map or wholly blocked sites', () => {
   assert.equal(findCampLocation({ x: 200, z: 0 }), null);
-  assert.equal(findCampLocation({ x: -125, z: 170 }), null);
-  assert.equal(findCampLocation({ x: -400, z: 0 }), null);
+  assert.equal(findCampLocation({ x: LAKE.x, z: LAKE.z }), null);
+  assert.equal(findCampLocation({ x: WORLD.minX - 50, z: 0 }), null);
   assert.equal(findCampLocation(SUMMIT, {}, [{ kind: 'box', minX: -200, maxX: -90, minZ: -250, maxZ: -140 }]), null);
   assert.equal(findCampLocation({ x: NaN, z: 0 }), null);
   assert.equal(footprintClear({ ...footprint, width: -1 }), false);

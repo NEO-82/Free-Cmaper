@@ -1,16 +1,18 @@
 // Shared world coordinates and collision math. Keep independent of Three.js so
 // hiking, terrain sampling and tests all use exactly the same surface.
-export const WORLD = Object.freeze({ minX: -350, maxX: 350, minZ: -285, maxZ: 285, landMaxX: 110 });
+export const WORLD = Object.freeze({ minX: -500, maxX: 500, minZ: -400, maxZ: 400, landMaxX: 165 });
 export const SHOP = Object.freeze({ x: -30, z: -35 });
 export const SUMMIT = Object.freeze({ x: -145, z: -195, radius: 20, height: 88 });
-export const LAKE = Object.freeze({ x: -125, z: 170, radiusX: 40, radiusZ: 30 });
+export const LAKE = Object.freeze({ x: -160, z: 250, radiusX: 55, radiusZ: 42 });
+export const RIVER_START = 280;
+export const COAST_START = 130;
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
-export function riverX(z) { return -125 + Math.sin((z - 192) * 0.04) * 15; }
+export function riverX(z) { return LAKE.x + Math.sin((z - RIVER_START) * 0.03) * 19; }
 export function isWater(x, z) {
   if (x >= WORLD.landMaxX) return true;
   const lake = ((x - LAKE.x) / LAKE.radiusX) ** 2 + ((z - LAKE.z) / LAKE.radiusZ) ** 2;
-  return lake < 1 || (z >= 192 && Math.abs(x - riverX(z)) < 5.5);
+  return lake < 1 || (z >= RIVER_START && Math.abs(x - riverX(z)) < 5.5);
 }
 export function terrainHeight(x, z) {
   if (!Number.isFinite(x) || !Number.isFinite(z)) return 0;
@@ -21,17 +23,18 @@ export function terrainHeight(x, z) {
   const westRidge = 32 * Math.exp(-(((x + 290) / 59) ** 2 + ((z + 234) / 66) ** 2));
   const northRidge = 22 * Math.exp(-(((x - 8) / 64) ** 2 + ((z + 250) / 42) ** 2));
   const roughness = Math.sin(x * 0.1 + z * 0.032) * Math.sin(z * 0.08) * 2.1 * smooth(23, 70, r);
-  h += mountain + westRidge + northRidge + roughness * Math.min(1, mountain / 30);
+  const frontierRidge = 43 * Math.exp(-(((x + 405) / 88) ** 2 + ((z + 140) / 130) ** 2)) + 32 * Math.exp(-(((x + 255) / 108) ** 2 + ((z + 365) / 58) ** 2));
+  h += mountain + westRidge + northRidge + frontierRidge + roughness * Math.min(1, mountain / 30);
   // Blend into an exactly level 40 m wide summit, with no ledge to climb over.
   h = SUMMIT.height * (1 - smooth(20, 29, r)) + h * smooth(20, 29, r);
   const outsideShop = Math.hypot(Math.max(-46 - x, 0, x + 14), Math.max(-50 - z, 0, z + 18));
   const shopBlend = 1 - smooth(0, 12, outsideShop);
   h = h * (1 - shopBlend) + 2.5 * shopBlend;
-  const coast = smooth(87, 118, x);
+  const coast = smooth(COAST_START, WORLD.landMaxX + 8, x);
   h = h * (1 - coast) - coast * 2.8;
-  if (x >= 110) h = -3.5 - Math.min(5, (x - 110) * 0.025);
+  if (x >= WORLD.landMaxX) h = -3.5 - Math.min(5, (x - WORLD.landMaxX) * 0.025);
   if (((x - LAKE.x) / LAKE.radiusX) ** 2 + ((z - LAKE.z) / LAKE.radiusZ) ** 2 < 1) h = -3;
-  if (z >= 192 && Math.abs(x - riverX(z)) < 5.5) h = -2.4;
+  if (z >= RIVER_START && Math.abs(x - riverX(z)) < 5.5) h = -2.4;
   return h;
 }
 const trail = [

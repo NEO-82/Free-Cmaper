@@ -1,8 +1,12 @@
 import * as THREE from 'three';
 import { DEFAULT_OPTIONS, normalizeOptions, lookAngles, movementSpeed, togglePosture, verticalStep, timeAdvances } from './controls.js';
 import { translate, seasonKeys } from './i18n.js';
-import { WORLD, SHOP, SUMMIT, terrainHeight, isWater, resolveMovement } from './terrain.js';
+import { WORLD, SHOP, SUMMIT, LAKE, terrainHeight, isWater, resolveMovement } from './terrain.js';
 import { createWorld } from './world.js';
+import { createAtmosphere, weatherTextures } from './atmosphere.js';
+import { createCamper, poseCamper } from './characters.js';
+import { outdoorCameraPosition } from './camera.js';
+import { createWildlife, animateWildlife } from './wildlife.js';
 import { findCampLocation } from './placement.js';
 import { createShop, createTent } from './structures.js';
 import { GOODS, DEFAULT_TENT_CONFIG, TENT_CHOICES, tentPrice, buyItem, sellItem, buyTent, LOGS_PER_TREE } from './economy.js';
@@ -14,7 +18,7 @@ const t = key => translate(key, options.language);
 let season = 0, mode = 'car', running = false, paused = false, elapsed = 0, money = 180000;
 let camp = null, clean = false, protectedCamp = false, danger = false, campCount = 0;
 let backpackOpen = false, optionsOpen = false, posture = 'stand', jumpHeight = 0, jumpVelocity = 0;
-let target = null, yaw = 0.65, pitch = 0.6, dist = 20, weather = 'clear', weatherTick = -1, lastEncounter = 0;
+let target = null, yaw = 0, pitch = 0.32, dist = 9.5, weather = 'clear', weatherTick = -1, lastEncounter = 0;
 let inventory = new Map();
 const visited = new Set(), keys = new Set();
 let tentConfig = { ...DEFAULT_TENT_CONFIG }, tentDraft = { ...DEFAULT_TENT_CONFIG }, shopOpen = false, cameraMode = 'outdoor', actionAt = -1000, treeCount = 0;
@@ -62,54 +66,29 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = THREE.NeutralToneMapping;
 $('#scene').appendChild(renderer.domElement);
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.08, 1800);
-const ambient = new THREE.HemisphereLight('#e5f1e8', '#3e5441', 2);
+const ambient = new THREE.HemisphereLight('#d7edff', '#7d9564', 2);
 scene.add(ambient);
-const sun = new THREE.DirectionalLight('#ffe1a0', 3);
+const sun = new THREE.DirectionalLight('#fff0d0', 3);
 sun.position.set(-40, 60, -20); sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110 });
+Object.assign(sun.shadow.camera, { left: -65, right: 65, top: 65, bottom: -65, far: 340 });
+sun.shadow.normalBias = 0.04; sun.shadow.bias = -0.00012; sun.shadow.radius = 2;
 scene.add(sun, sun.target);
 function mesh(geo, color, x, y, z, parent = scene) {
   const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.85 }));
   m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
 }
 const world = createWorld(scene);
+const atmosphere = createAtmosphere(scene);
 const shopBuilding = createShop(scene, { x: SHOP.x, y: terrainHeight(SHOP.x, SHOP.z), z: SHOP.z });
 let seed = 82;
 const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 
-function createCamper(parent) {
-  const root = new THREE.Group(), body = new THREE.Group(); root.add(body); parent.add(root);
-  const torso = mesh(new THREE.CylinderGeometry(0.5, 0.45, 1.2, 12), '#e6b168', 0, 1.5, 0, body);
-  mesh(new THREE.SphereGeometry(0.38, 12, 8), '#dbb391', 0, 2.4, 0, body);
-  mesh(new THREE.SphereGeometry(0.39, 12, 8), '#4a4037', 0, 2.55, 0.05, body).scale.y = 0.55;
-  mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), '#526e62', 0, 1.5, 0.4, body);
-  const legs = [-0.23, 0.23].map(x => {
-    const pivot = new THREE.Group(); pivot.position.set(x, 1, 0); body.add(pivot);
-    mesh(new THREE.BoxGeometry(0.28, 0.9, 0.3), '#40574d', 0, -0.45, 0, pivot);
-    return pivot;
-  });
-  [-0.67, 0.67].forEach(x => {
-    mesh(new THREE.CapsuleGeometry(0.15, 0.55, 4, 8), '#bb894e', x, 1.65, 0, body);
-    mesh(new THREE.SphereGeometry(0.15, 8, 6), '#d4a777', x, 1.12, 0, body);
-  });
-  [-0.23, 0.23].forEach(x => mesh(new THREE.BoxGeometry(0.34, 0.22, 0.55), '#473d32', x, 0.12, 0.13, body));
-  [-0.12, 0.12].forEach(x => mesh(new THREE.SphereGeometry(0.035, 6, 4), '#2a3230', x, 2.45, 0.35, body));
-  mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 16), '#a58b5b', 0, 2.65, 0, body);
-  mesh(new THREE.CylinderGeometry(0.57, 0.57, 0.04, 20), '#b79d6b', 0, 2.58, 0, body);
-  [-0.25, 0.25].forEach(x => mesh(new THREE.BoxGeometry(0.08, 0.9, 0.08), '#345546', x, 1.5, -0.42, body));
-  return { root, body, torso, legs };
-}
 const camper = createCamper(scene), player = camper.root;
 player.position.set(SHOP.x, terrainHeight(SHOP.x, -12), -12);
-function poseCamper(model, pose, walking = false, now = 0) {
-  model.body.rotation.x = pose === 'prone' ? -Math.PI / 2 : pose === 'crouch' ? 0.24 : 0;
-  model.body.position.set(0, pose === 'prone' ? 0.42 : pose === 'crouch' ? -0.62 : 0, 0);
-  model.legs.forEach((leg, i) => { leg.rotation.x = pose === 'crouch' ? -1.35 : walking ? Math.sin(now * 0.009 + i * Math.PI) * 0.45 : 0; });
-}
 
 // A separate, quiet title scene: a seated camper, rolling hill and a distant sunset.
 const titleScene = new THREE.Scene();
@@ -132,8 +111,7 @@ for (let i = 0; i < 6; i++) {
 }
 const menuCamper = createCamper(titleScene);
 menuCamper.root.position.set(10, 3.7, 2); menuCamper.root.rotation.y = Math.PI + 0.32;
-poseCamper(menuCamper, 'crouch');
-menuCamper.body.position.y = -0.75; menuCamper.body.rotation.x = 0.12;
+poseCamper(menuCamper, 'sit');
 mesh(new THREE.DodecahedronGeometry(1), '#6b7661', 12, 3.4, 4, titleScene).scale.set(1.7, 0.6, 1.3);
 for (let i = 0; i < 22; i++) {
   const x = 18 + rand() * 25, z = -35 + rand() * 30, h = 4 + rand() * 5;
@@ -141,19 +119,12 @@ for (let i = 0; i < 22; i++) {
   mesh(new THREE.ConeGeometry(h * 0.4, h * 1.2, 6), '#334e43', x, h * 0.95, z, titleScene);
 }
 
-const animals = [];
-for (let i = 0; i < 12; i++) {
-  const g = new THREE.Group();
-  const b = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 6), new THREE.MeshStandardMaterial({ color: i < 6 ? '#b39c77' : '#82928d' }));
-  b.scale.set(1, 0.8, 0.6); g.add(b);
-  const head = b.clone(); head.scale.set(0.4, 0.6, 0.4); head.position.set(0.65, 0.4, 0); g.add(head);
-  const ax = rand() * 300 - 270, az = rand() * 320 - 150;
-  g.position.set(ax, terrainHeight(ax, az) + 0.8, az); scene.add(g); animals.push(g);
-}
+const animals = createWildlife(scene);
 const count = 1400, positions = new Float32Array(count * 3);
 for (let i = 0; i < count; i++) { positions[i * 3] = rand() * 160 - 80; positions[i * 3 + 1] = rand() * 65; positions[i * 3 + 2] = rand() * 160 - 80; }
 const particlesGeo = new THREE.BufferGeometry(); particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-const particles = new THREE.Points(particlesGeo, new THREE.PointsMaterial({ color: '#f6d9df', size: 0.28, transparent: true, opacity: 0.8 })); scene.add(particles);
+const precipitationMaps = weatherTextures();
+const particles = new THREE.Points(particlesGeo, new THREE.PointsMaterial({ color: '#f6d9df', size: 0.28, transparent: true, opacity: 0.85, depthWrite: false, alphaTest: 0.03, map: precipitationMaps.blossoms })); scene.add(particles);
 function applySeason() {
   world.updateSeason(season);
   particles.material.color.set(['#f6d4df', '#c0dce8', '#e4ad61', '#ffffff'][season]);
@@ -222,10 +193,10 @@ $('#depart').onclick = () => {
   const checked = [...document.querySelectorAll('#gear input:checked')];
   if (checked.length !== 6) { $('#home-error').textContent = t('gearError'); return; }
   checked.forEach(i => inventory.set(i.value, 1));
-  camper.torso.scale.x = [1, 1.4, 0.75][$('#body').selectedIndex]; camper.torso.material.color.set($('#gender').value === 'female' ? '#cf947f' : '#e6b168');
+  camper.configure({ age: $('#age').value, gender: $('#gender').value, bodyType: $('#body').value });
   elapsed = (mode === 'car' ? 1 : 3) * 120; weatherTick = Math.floor(elapsed / 120); lastEncounter = weatherTick; weather = 'clear'; running = true; clearMovement();
   $('#home').classList.add('hidden'); $('#hud').classList.remove('hidden'); document.activeElement?.blur();
-  toast('arrived'); renderHUD();
+  player.rotation.y = yaw + Math.PI; toast('arrived'); renderHUD();
 };
 function hour() { return (5 + elapsed / 120) % 24; }
 function night() { return hour() < 6 || hour() >= 19; }
@@ -267,22 +238,23 @@ document.addEventListener('visibilitychange', () => { previous = performance.now
 document.addEventListener('pointerlockchange', () => { clearMovement(); });
 function look(dx, dy) { if (advancing()) ({ yaw, pitch } = lookAngles(yaw, pitch, dx, dy, options)); }
 document.addEventListener('mousemove', e => { if (document.pointerLockElement === renderer.domElement) look(e.movementX, e.movementY); });
-let touchPosition = null;
+let touchPosition = null, mouseDragging = false;
 renderer.domElement.addEventListener('pointerdown', e => {
   if (!advancing()) return;
   if (e.pointerType === 'touch') { touchPosition = { x: e.clientX, y: e.clientY }; renderer.domElement.setPointerCapture(e.pointerId); }
   else if (!document.pointerLockElement) {
+    mouseDragging = true;
     try { const promise = renderer.domElement.requestPointerLock?.(); promise?.catch(() => toast('mouseFallback')); } catch { toast('mouseFallback'); }
   }
 });
 renderer.domElement.addEventListener('pointermove', e => {
   if (document.pointerLockElement) return;
   if (e.pointerType === 'touch') { if (touchPosition) { look(e.clientX - touchPosition.x, e.clientY - touchPosition.y); touchPosition = { x: e.clientX, y: e.clientY }; } }
-  else look(e.movementX, e.movementY);
+  else if (mouseDragging) look(e.movementX, e.movementY);
 });
-renderer.domElement.addEventListener('pointerup', () => { touchPosition = null; });
-renderer.domElement.addEventListener('pointercancel', () => { touchPosition = null; });
-renderer.domElement.addEventListener('wheel', e => { if (advancing()) dist = THREE.MathUtils.clamp(dist + e.deltaY * 0.025, 12, 60); });
+renderer.domElement.addEventListener('pointerup', () => { touchPosition = null; mouseDragging = false; });
+renderer.domElement.addEventListener('pointercancel', () => { touchPosition = null; mouseDragging = false; });
+renderer.domElement.addEventListener('wheel', e => { if (advancing()) dist = THREE.MathUtils.clamp(dist + e.deltaY * 0.025, 4.5, 45); });
 $('#map').onclick = e => {
   if (!advancing() || cameraMode !== 'outdoor') return; const r = e.currentTarget.getBoundingClientRect();
   target = new THREE.Vector3(THREE.MathUtils.clamp(WORLD.minX + (e.clientX - r.left) / r.width * (WORLD.maxX - WORLD.minX), WORLD.minX + 1, WORLD.landMaxX - 1), 0, THREE.MathUtils.clamp(WORLD.minZ + (e.clientY - r.top) / r.height * (WORLD.maxZ - WORLD.minZ), WORLD.minZ + 1, WORLD.maxZ - 1));
@@ -449,7 +421,7 @@ function renderHUD() {
   pinAt($('#pin'), player.position.x, player.position.z); pinAt($('#shop-pin'), SHOP.x, SHOP.z); pinAt($('#summit-pin'), SUMMIT.x, SUMMIT.z);
   $('#camp-pin').classList.toggle('hidden', !camp);
   if (camp) pinAt($('#camp-pin'), camp.group.position.x, camp.group.position.z);
-  const area = Math.hypot(player.position.x - SUMMIT.x, player.position.z - SUMMIT.z) < SUMMIT.radius ? 'summit' : player.position.z > 130 ? 'lakeside' : player.position.x > 80 ? 'seaside' : 'woodland';
+  const area = Math.hypot(player.position.x - SUMMIT.x, player.position.z - SUMMIT.z) < SUMMIT.radius ? 'summit' : player.position.z > LAKE.z - 60 ? 'lakeside' : player.position.x > WORLD.landMaxX - 35 ? 'seaside' : 'woodland';
   $('#location-label').textContent = `${t(area)} · ${t('altitude')} ${Math.round(currentFloor())} m`;
   $('#pause-badge').classList.toggle('hidden', advancing());
   updateContext();
@@ -481,7 +453,7 @@ function stepGame(dt, now, realSeconds) {
   heldTool.visible = !!activeTool && inventory.has(activeTool);
   heldTool.rotation.z = now - actionAt < 350 ? Math.sin((now - actionAt) / 350 * Math.PI) * 1.7 : -0.15;
   toolHead.scale.set(activeTool === 'pickaxe' ? 1.8 : 1, activeTool === 'shovel' ? 1.6 : 1, 1);
-  visited.add(player.position.z < -110 ? 'mountain' : player.position.z > 130 ? 'lake' : player.position.x > 80 ? 'coast' : 'forest');
+  visited.add(player.position.z < -110 ? 'mountain' : player.position.z > LAKE.z - 60 ? 'lake' : player.position.x > WORLD.landMaxX - 35 ? 'coast' : 'forest');
   if (Math.hypot(player.position.x - SUMMIT.x, player.position.z - SUMMIT.z) < SUMMIT.radius) visited.add('summit');
   const tick = Math.floor(elapsed / 120);
   if (tick !== weatherTick) {
@@ -491,16 +463,18 @@ function stepGame(dt, now, realSeconds) {
   if (danger && cameraMode !== 'outdoor') { danger = false; toast('safeZone'); }
   particles.visible = cameraMode === 'outdoor' && weather !== 'clear' && weather !== 'fog';
   particles.position.set(player.position.x, currentFloor(), player.position.z);
-  particles.material.size = weather === 'rain' ? 0.14 : season === 3 ? 0.23 : 0.3;
+  particles.material.map = precipitationMaps[weather] ?? precipitationMaps.blossoms;
+  particles.material.size = weather === 'rain' ? 0.7 : season === 3 ? 0.25 : 0.33;
   const a = particlesGeo.attributes.position.array;
   for (let i = 0; i < count; i++) { a[i * 3 + 1] -= dt * (weather === 'rain' ? 25 : 2); a[i * 3] += dt * Math.sin(now * 0.0003 + i) * 1.5; if (a[i * 3 + 1] < 0) a[i * 3 + 1] = 65; }
   particlesGeo.attributes.position.needsUpdate = true;
   animals.forEach((g, i) => {
-    g.visible = i < 6 ? !night() : night();
+    g.visible = g.userData.nocturnal ? night() : !night();
     const nextX = g.position.x + Math.sin(now * 0.0002 + i) * dt * 0.5;
     if (!isWater(nextX, g.position.z)) g.position.x = nextX;
-    g.position.y = terrainHeight(g.position.x, g.position.z) + 0.8;
+    g.position.y = terrainHeight(g.position.x, g.position.z) + (g.userData.groundOffset ?? 0);
   });
+  animateWildlife(animals, elapsed, dt);
   world.animate(dt, elapsed, player.position); shopBuilding.update(dt);
   if (campfire) {
     campfire.userData.flame.visible = campfire.userData.lit;
@@ -517,25 +491,25 @@ function animate(now) {
   if (advancing()) stepGame(dt, now, realSeconds);
   if (!running) { renderer.render(titleScene, titleCamera); return; }
   const daylight = THREE.MathUtils.clamp(Math.sin((hour() - 5) / 14 * Math.PI), 0.10, 1);
-  ambient.intensity = 0.85 + daylight * 1.65; sun.intensity = daylight * 2.8;
+  ambient.intensity = night() ? 0.65 : 1.4 + Math.sqrt(daylight) * 1.8; sun.intensity = daylight * 2.5;
   sun.target.position.copy(player.position);
   sun.position.set(player.position.x + Math.cos(hour() / 24 * Math.PI * 2) * 80, player.position.y + Math.max(16, daylight * 110), player.position.z - 45);
-  const sky = new THREE.Color().lerpColors(new THREE.Color('#21364b'), new THREE.Color('#b9d1cf'), daylight);
-  if (hour() >= 5 && hour() < 8) sky.lerp(new THREE.Color('#edc5a1'), 0.4);
-  scene.background.copy(sky); scene.fog.color.copy(sky); scene.fog.density = cameraMode !== 'outdoor' ? 0.0005 : weather === 'fog' ? 0.006 : 0.0016;
+  const sky = atmosphere.update(hour(), weather, elapsed, player.position);
+  scene.fog.color.copy(sky.horizon); scene.fog.density = cameraMode !== 'outdoor' ? 0.0003 : weather === 'fog' ? 0.0045 : 0.00085;
   const eye = posture === 'prone' ? 0.6 : posture === 'crouch' ? 1.1 : 2.1;
   if (cameraMode === 'tent') {
     camera.position.set(player.position.x, player.position.y + eye, player.position.z);
-    camera.lookAt(player.position.x - Math.sin(yaw) * 10, player.position.y + eye - Math.sin(pitch - 0.6) * 10, player.position.z - Math.cos(yaw) * 10);
+    camera.lookAt(player.position.x - Math.sin(yaw) * 10, player.position.y + eye - Math.sin(pitch - 0.32) * 10, player.position.z - Math.cos(yaw) * 10);
   } else if (cameraMode === 'shop') {
     const b = shopBuilding.bounds, back = 2.7;
-    camera.position.set(THREE.MathUtils.clamp(player.position.x + Math.sin(yaw) * back + Math.cos(yaw) * 0.8, b.minX + 0.7, b.maxX - 0.7), player.position.y + 2.6 + Math.sin(pitch - 0.6), THREE.MathUtils.clamp(player.position.z + Math.cos(yaw) * back - Math.sin(yaw) * 0.8, b.minZ + 0.7, b.maxZ - 0.7));
+    camera.position.set(THREE.MathUtils.clamp(player.position.x + Math.sin(yaw) * back + Math.cos(yaw) * 0.8, b.minX + 0.7, b.maxX - 0.7), player.position.y + 2.6 + Math.sin(pitch - 0.32), THREE.MathUtils.clamp(player.position.z + Math.cos(yaw) * back - Math.sin(yaw) * 0.8, b.minZ + 0.7, b.maxZ - 0.7));
     const safeCamera = resolveMovement(player.position, { x: camera.position.x - player.position.x, z: camera.position.z - player.position.z }, shopBuilding.colliders(), 0.22);
     camera.position.x = safeCamera.x; camera.position.z = safeCamera.z;
-    camera.lookAt(player.position.x - Math.sin(yaw) * 5, player.position.y + 1.8 - Math.sin(pitch - 0.6) * 5, player.position.z - Math.cos(yaw) * 5);
+    camera.lookAt(player.position.x - Math.sin(yaw) * 5, player.position.y + 1.8 - Math.sin(pitch - 0.32) * 5, player.position.z - Math.cos(yaw) * 5);
   } else {
     camera.position.set(player.position.x + Math.sin(yaw) * dist * Math.cos(pitch), player.position.y + eye + Math.sin(pitch) * dist, player.position.z + Math.cos(yaw) * dist * Math.cos(pitch));
-    camera.position.y = Math.max(camera.position.y, terrainHeight(camera.position.x, camera.position.z) + 1);
+    const safe = outdoorCameraPosition({ x: player.position.x, y: player.position.y + 1.8, z: player.position.z }, camera.position, { trees: world.trees, rocks: world.rocks, groundHeight: terrainHeight });
+    camera.position.set(safe.x, safe.y, safe.z);
     camera.lookAt(player.position.x, player.position.y + 1.8, player.position.z);
   }
   renderer.render(scene, camera);
@@ -547,6 +521,6 @@ syncOptions(); localize(); requestAnimationFrame(animate);
 if (import.meta.env.DEV) {
   window.__camper = {
     snapshot: () => ({ running, paused, cameraMode, elapsed, money, inventory: Object.fromEntries(inventory), player: player.position.toArray(), yaw, pitch, tentConfig: { ...tentConfig }, treeCount, shopDoor: shopBuilding.doorOpen, context: contextAction?.kind, trees: world.trees.map(({ id, x, z, hits, felled }) => ({ id, x, z, hits, felled })), camp: camp ? { position: camp.group.position.toArray(), entrance: camp.entrance.toArray(), inside: camp.insidePosition.toArray(), doorOpen: camp.doorOpen, bounds: camp.bounds } : null }),
-    teleport(x, z, facing = 0) { if (!Number.isFinite(x) || !Number.isFinite(z)) return; player.position.set(x, terrainHeight(x, z), z); yaw = facing; jumpHeight = 0; jumpVelocity = 0; clearMovement(); updateInterior(); player.position.y = currentFloor(); renderHUD(); },
+    teleport(x, z, facing = 0) { if (!Number.isFinite(x) || !Number.isFinite(z)) return; player.position.set(x, terrainHeight(x, z), z); yaw = facing; jumpHeight = 0; jumpVelocity = 0; clearMovement(); updateInterior(); player.position.y = currentFloor(); player.rotation.y = yaw + Math.PI; renderHUD(); },
   };
 }

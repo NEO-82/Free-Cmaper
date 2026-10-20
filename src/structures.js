@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 export const DEFAULT_TENT = Object.freeze({ size: 'standard', type: 'dome', color: 'sand', material: 'canvas' });
 export const TENT_OPTIONS = Object.freeze({
@@ -7,7 +8,7 @@ export const TENT_OPTIONS = Object.freeze({
   color: ['sand', 'forest', 'rust', 'navy'],
   material: ['canvas', 'ripstop'],
 });
-export const TENT_COLORS = Object.freeze({ sand: '#cca368', forest: '#536d4c', rust: '#b56a48', navy: '#4a617b' });
+export const TENT_COLORS = Object.freeze({ sand: '#e8bc72', forest: '#4e9a68', rust: '#e37c47', navy: '#497da5' });
 const SIZE_SCALE = { standard: 1, large: 1.25, family: 1.5 };
 
 export function normalizeTentConfig(config = {}) {
@@ -20,32 +21,62 @@ export function tentDimensions(config = DEFAULT_TENT) {
 
 function canvasTexture(kind, color = '#ffffff') {
   if (typeof document === 'undefined') return null;
-  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 256;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = color; ctx.fillRect(0, 0, 128, 128);
+  ctx.fillStyle = color; ctx.fillRect(0, 0, 256, 256);
   if (kind === 'wood') {
-    for (let x = 0; x < 128; x += 16) {
-      ctx.fillStyle = x % 32 ? '#ffffff08' : '#0000000c'; ctx.fillRect(x + 1, 0, 14, 128);
-      ctx.strokeStyle = '#35281d88'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 128); ctx.stroke();
-      for (let i = 0; i < 5; i++) { const y = i * 25 + (x % 18); ctx.strokeStyle = '#30221c35'; ctx.beginPath(); ctx.ellipse(x + 7, y, 2, 6, 0, 0, Math.PI * 2); ctx.stroke(); }
+    for (let x = 0; x < 256; x += 32) {
+      ctx.fillStyle = x % 64 ? '#ffe3a417' : '#6d452016'; ctx.fillRect(x + 1, 0, 30, 256);
+      ctx.strokeStyle = '#70421f6b'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 256); ctx.stroke();
+      for (let i = 0; i < 3; i++) {
+        const yy = i * 80 + x % 21; ctx.strokeStyle = '#87502d38'; ctx.beginPath(); ctx.ellipse(x + 16, yy, 4, 18, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = '#f3cc8f44'; ctx.beginPath(); ctx.moveTo(x + 6, yy - 30); ctx.bezierCurveTo(x + 15, yy - 15, x + 4, yy + 15, x + 6, yy + 35); ctx.stroke();
+      }
     }
   } else {
-    for (let i = 0; i < 128; i += 3) {
-      ctx.fillStyle = '#ffffff0c'; ctx.fillRect(0, i, 128, 1);
-      ctx.fillStyle = '#0000000a'; ctx.fillRect(i, 0, 1, 128);
+    for (let i = 0; i < 256; i += 3) {
+      ctx.fillStyle = '#ffffff07'; ctx.fillRect(0, i, 256, 1);
+      ctx.fillStyle = '#283e3105'; ctx.fillRect(i, 0, 1, 256);
     }
-    if (kind === 'ripstop') for (let i = 0; i < 128; i += 16) { ctx.fillStyle = '#ffffff38'; ctx.fillRect(i, 0, 1, 128); ctx.fillRect(0, i, 128, 1); }
-    else for (let i = 0; i < 128; i += 8) { ctx.fillStyle = '#ffffff13'; ctx.fillRect(i, 0, 1, 128); }
+    if (kind === 'ripstop') for (let i = 0; i < 256; i += 24) { ctx.fillStyle = '#ffffff21'; ctx.fillRect(i, 0, 1, 256); ctx.fillRect(0, i, 256, 1); }
+    else for (let i = 0; i < 256; i += 12) { ctx.fillStyle = '#ffecc20a'; ctx.fillRect(i, 0, 1, 256); }
   }
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping; texture.repeat.set(kind === 'wood' ? 2 : 3, kind === 'wood' ? 1 : 3);
   return texture;
 }
-function material(color, options = {}) { return new THREE.MeshStandardMaterial({ color, roughness: .83, ...options }); }
+function material(color, options = {}) { return new THREE.MeshStandardMaterial({ color, roughness: .72, ...options }); }
 function add(parent, geometry, mat, x = 0, y = 0, z = 0) {
   const m = new THREE.Mesh(geometry, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
 }
-function box(parent, width, height, depth, mat, x, y, z) { return add(parent, new THREE.BoxGeometry(width, height, depth), mat, x, y, z); }
+function box(parent, width, height, depth, mat, x, y, z) {
+  const radius = Math.min(.07, Math.min(width, height, depth) * .18);
+  return add(parent, new RoundedBoxGeometry(width, height, depth, 1, radius), mat, x, y, z);
+}
+function tubeLine(parent, points, radius, mat, segments = 48) {
+  const path = new THREE.CurvePath();
+  for (let i = 1; i < points.length; i++) path.add(new THREE.LineCurve3(new THREE.Vector3(...points[i - 1]), new THREE.Vector3(...points[i])));
+  return add(parent, new THREE.TubeGeometry(path, segments, radius, 6, false), mat);
+}
+function instances(parent, geometry, mat, transforms) {
+  const batch = new THREE.InstancedMesh(geometry, mat, transforms.length), dummy = new THREE.Object3D();
+  transforms.forEach((tr, i) => {
+    dummy.position.set(...tr.position); dummy.rotation.set(...(tr.rotation || [0, 0, 0])); dummy.scale.set(...(tr.scale || [1, 1, 1])); dummy.updateMatrix(); batch.setMatrixAt(i, dummy.matrix);
+    if (tr.color) batch.setColorAt(i, new THREE.Color(tr.color));
+  });
+  batch.castShadow = true; batch.receiveShadow = true; batch.instanceMatrix.needsUpdate = true; batch.computeBoundingSphere(); parent.add(batch); return batch;
+}
+function flowerBox(parent, x, y, z, wood, leaf, bloom) {
+  box(parent, 2.2, .5, .55, wood, x, y, z);
+  const shapes = [], flowers = [];
+  for (let i = 0; i < 8; i++) {
+    const xx = x - .95 + i * .27, yy = y + .25 + Math.sin(i * 1.7) * .12;
+    shapes.push({ position: [xx, yy + .3, z], rotation: [0, i, (i % 2 ? 1 : -1) * .5], scale: [.22, .5, .14] });
+    if (i % 2 === 0) flowers.push({ position: [xx, yy + .6, z + .02], scale: [.13, .13, .1], color: i % 3 ? '#f3d764' : '#f0b3bd' });
+  }
+  instances(parent, new THREE.SphereGeometry(1, 7, 5), leaf, shapes);
+  instances(parent, new THREE.IcosahedronGeometry(1, 1), bloom, flowers);
+}
 function rod(parent, from, to, radius, mat) {
   const a = new THREE.Vector3(...from), b = new THREE.Vector3(...to), vector = b.clone().sub(a);
   const m = add(parent, new THREE.CylinderGeometry(radius, radius, vector.length(), 7), mat);
@@ -84,13 +115,18 @@ export function createShop(scene, position) {
   const origin = { x: 0, y: 0, z: 0, rotation: 0, ...position };
   const group = new THREE.Group(); group.position.set(origin.x, origin.y, origin.z); group.rotation.y = origin.rotation; scene.add(group);
   group.userData.interaction = 'shop';
-  const woodTexture = canvasTexture('wood', '#9a7952');
+  const woodTexture = canvasTexture('wood', '#c08d5e');
   const wood = material('#ffffff', { map: woodTexture });
-  const darkWood = material('#544738'), beam = material('#65523b'), roofMat = material('#47564e', { metalness: .12 });
+  const darkWood = material('#795237'), beam = material('#8f5e37'), roofMat = material('#437e83', { roughness: .68 });
   const metal = material('#414c46', { metalness: .65, roughness: .35 });
   const glass = material('#96c3bf', { transparent: true, opacity: .45, metalness: .25, roughness: .15, side: THREE.DoubleSide });
-  const glow = material('#ffe0a2', { emissive: '#ffc778', emissiveIntensity: .8 });
+  const glow = material('#ffe8ae', { emissive: '#ffbe68', emissiveIntensity: .65 });
+  const gold = material('#d4a550', { metalness: .35, roughness: .48 }), cream = material('#f2d49c');
   box(group, 20.5, .3, 17.5, wood, 0, .15, 0);
+  const foundation = [];
+  for (let i = 0; i < 13; i++) for (const z of [-8.52, 8.52]) foundation.push({ position: [-9.25 + i * 1.54, -.12, z], scale: [1, .42, .72], color: i % 3 ? '#b8a17f' : '#d0b28a' });
+  for (let i = 0; i < 10; i++) for (const x of [-10, 10]) foundation.push({ position: [x, -.12, -7.5 + i * 1.66], rotation: [0, Math.PI / 2, 0], scale: [1, .42, .72], color: i % 3 ? '#b8a17f' : '#d0b28a' });
+  instances(group, new RoundedBoxGeometry(1.48, .8, .65, 1, .12), material('#ffffff'), foundation);
   for (let i = -8; i <= 8; i += 1) box(group, 20.2, .025, .025, darkWood, 0, .315, i);
   const walls = new THREE.Group(); group.add(walls);
   // Solid walls are split around the functional front door and side windows.
@@ -107,13 +143,21 @@ export function createShop(scene, position) {
     for (const zz of [-2.7, 0, 2.7]) box(walls, .4, 2.95, .13, beam, side * 10, 3.35, zz);
     for (const yy of [2, 4.7]) box(walls, .4, .15, 5.7, beam, side * 10, yy, 0);
   }
+  // Separate overlapping cedar courses catch highlights along the cabin facade.
+  const siding = [];
+  for (let row = 0; row < 12; row++) for (const side of [-1, 1]) siding.push({ position: [side * 5.8, .45 + row * .54, 8.69], color: row % 3 ? '#d2a06c' : '#c58c56' });
+  instances(walls, new RoundedBoxGeometry(8.28, .54, .13, 1, .04), material('#ffffff'), siding);
   for (const x of [-10, 10]) for (const z of [-8.5, 8.5]) box(group, .5, 7, .5, beam, x, 3.5, z);
   for (const x of [-1.7, 1.7]) box(group, .24, 4, .5, beam, x, 2, 8.5);
   box(group, 3.65, .22, .5, beam, 0, 3.9, 8.5);
   const roof = new THREE.Group(); group.add(roof);
   for (const side of [-1, 1]) {
-    const panel = box(roof, 11.9, .28, 19, roofMat, side * 5.3, 8, 0); panel.rotation.z = -side * .29;
-    for (let z = -9; z <= 9; z += .75) { const seam = box(roof, 11.9, .08, .04, metal, side * 5.3, 8.17, z); seam.rotation.z = -side * .29; }
+    const roofSide = new THREE.Group(); roofSide.position.set(side * 5.3, 8, 0); roofSide.rotation.z = -side * .29; roof.add(roofSide);
+    box(roofSide, 11.9, .28, 19, roofMat, 0, 0, 0);
+    const shingles = [];
+    for (let row = 0; row < 5; row++) for (let col = 0; col < 26; col++) shingles.push({ position: [-4.7 + row * 2.36, .2 + row * .012, -9.12 + col * .73 + row % 2 * .14], color: ['#4d9090', '#498383', '#559891', '#39747b'][(row + col) % 4] });
+    instances(roofSide, new RoundedBoxGeometry(2.4, .14, .76, 1, .04), material('#ffffff'), shingles);
+    box(roofSide, .18, .45, 19.5, beam, side * 5.9, -.04, 0);
   }
   box(roof, .22, .3, 19.4, metal, 0, 9.7, 0);
   for (const z of [-8.5, 8.5]) {
@@ -122,17 +166,24 @@ export function createShop(scene, position) {
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, .5, 1], 2)); geometry.computeVertexNormals();
     add(roof, geometry, material('#c0a376', { side: THREE.DoubleSide }));
   }
-  label(group, 'TRAIL OUTFITTER', 0, 5.45, 8.75, 10, 1.15);
+  label(group, 'TRAIL OUTFITTER', 0, 5.45, 8.91, 10, 1.15);
+  for (const side of [-1, 1]) flowerBox(group, side * 6.6, 1.35, 8.98, beam, material('#51a34c'), material('#ffffff'));
+  for (const x of [-1.72, 1.72]) for (let i = 0; i < 3; i++) {
+    add(group, new THREE.SphereGeometry(.095, 8, 6), gold, x, .7 + i * 1.15, 8.82);
+  }
   box(group, 22, .17, 3.4, darkWood, 0, .08, 10.2);
   for (const x of [-9, 9]) box(group, .3, 6.5, .3, beam, x, 3.25, 11.4);
   box(group, 22, .25, 3.7, roofMat, 0, 6.5, 10.2).rotation.x = .1;
   const doorPivot = new THREE.Group(); doorPivot.position.set(-1.6, .3, 8.5); group.add(doorPivot);
   box(doorPivot, 3.2, 3.6, .15, darkWood, 1.6, 1.8, 0);
   box(doorPivot, 2.6, 1.65, .06, glass, 1.6, 2.4, .09);
-  box(doorPivot, .12, .32, .18, metal, 2.85, 1.5, .2);
+  for (const x of [.24, 2.96]) box(doorPivot, .12, 3.35, .12, cream, x, 1.8, .12);
+  for (const y of [.25, 1.42, 3.43]) box(doorPivot, 2.84, .11, .12, cream, 1.6, y, .12);
+  add(doorPivot, new THREE.SphereGeometry(.105, 12, 8), gold, 2.84, 1.48, .25);
+  box(doorPivot, .12, .3, .08, gold, 2.84, 1.48, .17);
   lantern(group, -2.7, 3.3, 9, metal, glow); lantern(group, 2.7, 3.3, 9, metal, glow);
   // Shelves, pots, rolled mats, tent display and climbing tools.
-  const productMats = ['#b9945d', '#586f50', '#ab6550', '#526a84', '#d3ba82'].map(c => material(c));
+  const productMats = ['#dfb15f', '#69a862', '#de7f5c', '#598eb9', '#e9c991'].map(c => material(c));
   for (const side of [-1, 1]) for (let shelf = 0; shelf < 3; shelf++) {
     const y = 1 + shelf * 1.35;
     box(group, 1.65, .18, 11.5, darkWood, side * 8.8, y, -1);
@@ -146,20 +197,54 @@ export function createShop(scene, position) {
   box(group, 8, 1.7, 1.8, wood, 3, 1.15, -3.8);
   box(group, 8.2, .16, 2, darkWood, 3, 2.08, -3.8);
   box(group, .85, .45, .7, metal, 5.5, 2.4, -3.8);
+  const registerScreen = box(group, .65, .38, .07, material('#98c6a8', { emissive: '#335941', emissiveIntensity: .22 }), 5.5, 2.76, -3.8); registerScreen.rotation.x = -.28;
+  for (let j = 0; j < 3; j++) box(group, .1, .04, .06, cream, 5.25 + j * .22, 2.66, -3.44);
+  for (let j = 0; j < 3; j++) { const mug = add(group, new THREE.CylinderGeometry(.16, .14, .28, 12), productMats[j], 1.1 + j * .47, 2.3, -3.7); add(mug, new THREE.TorusGeometry(.105, .03, 6, 12), productMats[j], .18, 0, 0); }
+  const folded = [];
+  for (let i = 0; i < 4; i++) folded.push({ position: [3.8, 2.23 + i * .16, -3.65], color: ['#dd9f63', '#77a37e', '#d8c996', '#5f8eac'][i] });
+  instances(group, new RoundedBoxGeometry(1.05, .15, .7, 1, .06), material('#ffffff'), folded);
   lantern(group, -.5, 2.45, -3.8, metal, glow);
   const owner = new THREE.Group(); owner.position.set(3, .3, -5.7); group.add(owner);
-  const skin = material('#c99774'), shirt = material('#c7b27c'), trousers = material('#4d6259');
-  add(owner, new THREE.CylinderGeometry(.38, .32, 1.05, 10), shirt, 0, 1.45, 0);
-  add(owner, new THREE.SphereGeometry(.34, 14, 10), skin, 0, 2.25, 0);
-  add(owner, new THREE.SphereGeometry(.35, 12, 10), material('#a6a392'), 0, 2.4, -.03).scale.y = .65;
-  for (const x of [-.19, .19]) box(owner, .26, .8, .28, trousers, x, .5, 0);
-  for (const x of [-.5, .5]) add(owner, new THREE.CapsuleGeometry(.12, .6, 3, 6), shirt, x, 1.4, 0);
-  box(owner, .5, .7, .1, trousers, 0, 1.3, .36);
-  for (const x of [-.12, .12]) add(owner, new THREE.SphereGeometry(.035, 7, 6), material('#3b332e'), x, 2.3, .31);
+  const skin = material('#e6b78c'), shirt = material('#e5b657'), trousers = material('#486c67'), hair = material('#c5c1aa');
+  box(owner, .83, 1.1, .52, shirt, 0, 1.46, 0);
+  add(owner, new THREE.CylinderGeometry(.16, .18, .27, 10), skin, 0, 2.03, 0);
+  const face = add(owner, new THREE.SphereGeometry(.44, 20, 14), skin, 0, 2.4, 0); face.scale.set(.98, 1.05, .92);
+  add(owner, new THREE.SphereGeometry(.11, 12, 8), skin, 0, 2.37, .395).scale.set(.8, .8, 1.35);
+  for (const x of [-.43, .43]) add(owner, new THREE.SphereGeometry(.105, 12, 8), skin, x, 2.4, -.015).scale.set(.65, 1, .85);
+  const hairCap = add(owner, new THREE.SphereGeometry(.455, 18, 12), hair, 0, 2.57, -.07); hairCap.scale.set(1.02, .68, .94);
+  for (let i = 0; i < 5; i++) add(owner, new THREE.IcosahedronGeometry(.16, 1), hair, -.3 + i * .15, 2.68 + Math.sin(i) * .04, -.02).scale.set(.85, .75, 1.3);
+  for (const x of [-.19, .19]) {
+    add(owner, new THREE.CapsuleGeometry(.14, .5, 4, 8), trousers, x, .56, 0);
+    box(owner, .31, .2, .46, material('#514537'), x, .14, .08);
+  }
+  for (const x of [-.54, .54]) {
+    add(owner, new THREE.CapsuleGeometry(.14, .37, 4, 8), shirt, x, 1.55, 0).rotation.z = x < 0 ? -.12 : .12;
+    add(owner, new THREE.SphereGeometry(.14, 12, 8), skin, x, 1.15, .04);
+  }
+  box(owner, .56, .75, .08, trousers, 0, 1.34, .31);
+  box(owner, .33, .25, .035, material('#609083'), 0, 1.25, .37);
+  for (const x of [-.23, .23]) box(owner, .045, .45, .04, trousers, x, 1.87, .28);
+  for (const x of [-.15, .15]) {
+    add(owner, new THREE.SphereGeometry(.085, 12, 8), material('#fff4df'), x, 2.47, .365).scale.set(.7, .9, .3);
+    add(owner, new THREE.SphereGeometry(.043, 10, 8), material('#3e4c3a'), x, 2.47, .392);
+    add(owner, new THREE.SphereGeometry(.015, 6, 4), material('#ffffff'), x + .012, 2.487, .429);
+    const brow = box(owner, .14, .035, .04, material('#837761'), x, 2.62, .35); brow.rotation.z = x < 0 ? .12 : -.12;
+  }
+  const smile = add(owner, new THREE.TorusGeometry(.10, .015, 6, 16, Math.PI), material('#ad7259'), 0, 2.25, .37); smile.rotation.z = Math.PI;
   label(group, 'WELCOME / 숲길 상점', 3, 4.25, -8.1, 8, 1);
   for (let i = 0; i < 5; i++) {
-    rod(group, [-5 + i, 1.4, -8.1], [-5 + i, 4.4, -8.1], .055, beam);
-    const head = box(group, .5, .24, .17, metal, -5 + i, 4.15, -8.1); head.rotation.z = i % 2 ? .2 : -.1;
+    const x = -5 + i;
+    rod(group, [x, 1.45, -8.1], [x, 4.35, -8.1], .055, beam);
+    if (i === 1) { // Pickaxe: tapered opposed metal heads.
+      const head = add(group, new THREE.ConeGeometry(.13, .72, 7), metal, x + .31, 4.12, -8.1); head.rotation.z = -Math.PI / 2;
+      const other = add(group, new THREE.ConeGeometry(.12, .55, 7), metal, x - .23, 4.12, -8.1); other.rotation.z = Math.PI / 2;
+    } else if (i === 2) {
+      box(group, .48, .58, .09, metal, x, 4.12, -8.1); box(group, .32, .42, .09, metal, x, 4.48, -8.1);
+    } else {
+      const head = box(group, .56, .33, .15, metal, x + .16, 4.12, -8.1); head.rotation.z = -.16;
+      box(group, .09, .33, .17, cream, x + .42, 4.1, -8.1);
+    }
+    box(group, .1, .58, .1, material('#624431'), x, 1.72, -8.1);
   }
   const model = {
     group, doorPivot, doorOpen: false, roof, owner,
@@ -234,8 +319,8 @@ export function createTent(scene, requestedConfig = DEFAULT_TENT, position = {})
   const origin = { x: 0, y: 0, z: 0, rotation: 0, ...position };
   const group = new THREE.Group(); group.position.set(origin.x, origin.y, origin.z); group.rotation.y = origin.rotation; group.userData.interaction = 'tent'; scene.add(group);
   const fabric = material('#ffffff', { map: canvasTexture(config.material, TENT_COLORS[config.color]), color: typeof document === 'undefined' ? TENT_COLORS[config.color] : '#ffffff', side: THREE.DoubleSide, roughness: config.material === 'ripstop' ? .55 : .95 });
-  const trim = material('#3b493e'), pole = material('#a9b2a6', { metalness: .7, roughness: .3 }), rope = material('#d8c59b');
-  const floor = material('#5b5f49', { side: THREE.DoubleSide }), bedding = material('#c1b89b'), dark = material('#36483e');
+  const trim = material('#314c48'), pole = material('#a9b2a6', { metalness: .7, roughness: .3 }), rope = material('#d8c59b');
+  const floor = material('#526b5e', { side: THREE.DoubleSide }), bedding = material('#deb978'), dark = material('#2d665d');
   box(group, w, .12, d, floor, 0, .06, 0);
   const shell = new THREE.Group(); group.add(shell);
   const { geometry, roofY } = archGeometry(w, d, h, config.type);
@@ -246,36 +331,62 @@ export function createTent(scene, requestedConfig = DEFAULT_TENT, position = {})
   const doorW = 3.4 * s, doorH = 3.6 * s;
   endPanel(shell, w, d / 2, x => roofY(x, d / 2), fabric, true, doorW, doorH);
   endPanel(shell, w, -d / 2, x => roofY(x, -d / 2), fabric, false);
-  // Arched aluminium poles follow the fabric profile. Dome poles cross overhead.
+  // Continuous bent poles and raised stitched seams follow the fabric silhouette.
   const ribZ = config.type === 'tunnel' ? [-d / 2, -d / 6, d / 6, d / 2] : [-d / 2, d / 2];
   for (const z of ribZ) {
-    rod(group, [-w / 2, 0, z], [-w / 2, edgeY, z], .055 * s, pole);
-    for (let i = 0; i < 20; i++) { const a = -w / 2 + w * i / 20, b = -w / 2 + w * (i + 1) / 20; rod(group, [a, roofY(a, z) + .05, z], [b, roofY(b, z) + .05, z], .055 * s, pole); }
-    rod(group, [w / 2, edgeY, z], [w / 2, 0, z], .055 * s, pole);
+    const points = [[-w / 2, 0, z], [-w / 2, edgeY, z]];
+    for (let i = 0; i <= 28; i++) { const x = -w / 2 + w * i / 28; points.push([x, roofY(x, z) + .055, z]); }
+    points.push([w / 2, 0, z]); tubeLine(group, points, .055 * s, pole, 60);
   }
-  if (config.type === 'dome') {
-    for (const direction of [-1, 1]) for (let i = 0; i < 20; i++) {
-      const a = -w / 2 + w * i / 20, b = -w / 2 + w * (i + 1) / 20;
-      rod(group, [a, roofY(a, direction * a / w * d) + .1, direction * a / w * d], [b, roofY(b, direction * b / w * d) + .1, direction * b / w * d], .05 * s, pole);
-    }
-  } else if (config.type === 'ridge') rod(group, [0, h + .06, -d / 2], [0, h + .06, d / 2], .07 * s, pole);
+  if (config.type === 'dome') for (const direction of [-1, 1]) {
+    const points = [];
+    for (let i = 0; i <= 28; i++) { const x = -w / 2 + w * i / 28, z = direction * x / w * d; points.push([x, roofY(x, z) + .1, z]); }
+    tubeLine(group, points, .05 * s, pole);
+  }
+  if (config.type === 'ridge') rod(group, [0, h + .06, -d / 2], [0, h + .06, d / 2], .07 * s, pole);
+  const seam = material('#f0d6a2');
+  for (const x of [-w * .28, w * .28]) {
+    const points = Array.from({ length: 17 }, (_, i) => { const z = -d / 2 + d * i / 16; return [x, roofY(x, z) + .025, z]; });
+    tubeLine(shell, points, .022 * s, seam, 24);
+  }
   // A real opening below the front end-panel, with an independently opening flap.
   const doorPivot = new THREE.Group(); doorPivot.position.set(-doorW / 2, .1, d / 2 + .055); group.add(doorPivot);
   box(doorPivot, doorW, doorH, .045, fabric, doorW / 2, doorH / 2, 0);
+  for (const x of [.1 * s, doorW - .1 * s]) box(doorPivot, .035 * s, doorH - .2 * s, .025, trim, x, doorH / 2, .035);
+  box(doorPivot, .12 * s, .22 * s, .04, pole, doorW - .16 * s, 1.35 * s, .06);
+  box(doorPivot, doorW - .2 * s, .035 * s, .025, trim, doorW / 2, doorH - .1 * s, .035);
+  box(doorPivot, doorW - .5 * s, .42 * s, .035, dark, doorW / 2, doorH * .73, .04);
   for (const x of [-doorW / 2, doorW / 2]) rod(group, [x, .1, d / 2 + .1], [x, doorH + .1, d / 2 + .1], .045 * s, trim);
   rod(group, [-doorW / 2, doorH + .1, d / 2 + .1], [doorW / 2, doorH + .1, d / 2 + .1], .045 * s, trim);
   for (const side of [-1, 1]) for (const zz of [-d / 2, d / 2]) {
     rod(group, [side * w / 2, edgeY * .9, zz], [side * (w / 2 + 2 * s), .06, zz + Math.sign(zz) * 1.6 * s], .027 * s, rope);
     rod(group, [side * (w / 2 + 2 * s), .02, zz + Math.sign(zz) * 1.6 * s], [side * (w / 2 + 2 * s), .4, zz + Math.sign(zz) * 1.6 * s], .055 * s, pole);
   }
+  // Cloth tiebacks, rainfly reinforcement patches and breathable mesh vents.
+  for (const side of [-1, 1]) {
+    box(shell, w * .19, .65 * s, .035, dark, side * w * .31, h * .43, d / 2 + .035);
+    box(shell, w * .21, .08 * s, .06, seam, side * w * .31, h * .43 + .38 * s, d / 2 + .07);
+    const tie = add(group, new THREE.TorusGeometry(.17 * s, .025 * s, 6, 12), rope, side * (doorW / 2 + .15 * s), 1.6 * s, d / 2 + .13); tie.rotation.y = side * .3;
+  }
   for (const x of [-w * .29, w * .29]) {
     box(group, w * .23, .18, d * .52, dark, x, .22, -d * .12);
     box(group, w * .21, .2, d * .46, bedding, x, .4, -d * .1);
-    box(group, w * .15, .2, d * .1, material('#ece2bc'), x, .58, -d * .3);
+    box(group, w * .15, .28, d * .1, material('#f0e0b5'), x, .6, -d * .3);
+    for (let i = 0; i < 7; i++) box(group, w * .2, .018, .035, material('#c9995e'), x, .515, -d * .28 + i * d * .052);
+    rod(group, [x + w * .1, .52, -d * .31], [x + w * .1, .52, d * .11], .025, pole);
   }
   box(group, 1.6 * s, .65 * s, 1.2 * s, trim, 0, .45 * s, -d * .28);
   lantern(group, 0, 1.1 * s, -d * .28, pole, material('#ffe6ad', { emissive: '#ffc96e', emissiveIntensity: 1 }));
-  box(group, .8 * s, 1.1 * s, .5 * s, material('#926b45'), -w * .36, .7, d * .2);
+  const packed = new THREE.Group(); packed.position.set(-w * .36, .3, d * .2); group.add(packed);
+  box(packed, .8 * s, 1.1 * s, .5 * s, material('#bd8751'), 0, .55, 0);
+  box(packed, .62 * s, .4 * s, .15 * s, material('#d3a36d'), 0, .36, .31 * s);
+  for (const x of [-.23 * s, .23 * s]) box(packed, .065 * s, .9 * s, .055, dark, x, .62, .29 * s);
+  const roll = add(packed, new THREE.CylinderGeometry(.16 * s, .16 * s, .9 * s, 12), bedding, 0, 1.2 * s, 0); roll.rotation.z = Math.PI / 2;
+  box(packed, .24 * s, .16 * s, .06, pole, 0, .56, .4 * s);
+  // A folded mat and enamel mug make the first-person interior feel inhabited.
+  const mug = add(group, new THREE.CylinderGeometry(.23 * s, .21 * s, .35 * s, 14), material('#e8dfbd'), .42 * s, .98 * s, -d * .28);
+  add(mug, new THREE.TorusGeometry(.13 * s, .035 * s, 6, 12), material('#e8dfbd'), .25 * s, 0, 0);
+  box(group, .5 * s, .045 * s, .7 * s, material('#d9c699'), -.4 * s, .8 * s, -d * .28);
   const model = {
     group, shell, config, dimensions: dims, doorPivot, doorOpen: false,
     entrance: worldPosition(origin, 0, .14, d / 2 + 1),
