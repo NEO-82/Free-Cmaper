@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pathSurfaceHeight } from './paths.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 export const DEFAULT_TENT = Object.freeze({ size: 'standard', type: 'dome', color: 'sand', material: 'canvas' });
@@ -377,8 +378,10 @@ export function createTent(scene, requestedConfig = DEFAULT_TENT, position = {})
   for (const x of [-doorW / 2, doorW / 2]) rod(group, [x, .1, d / 2 + .1], [x, doorH + .1, d / 2 + .1], .045 * s, trim);
   rod(group, [-doorW / 2, doorH + .1, d / 2 + .1], [doorW / 2, doorH + .1, d / 2 + .1], .045 * s, trim);
   for (const side of [-1, 1]) for (const zz of [-d / 2, d / 2]) {
-    rod(group, [side * w / 2, edgeY * .9, zz], [side * (w / 2 + 2 * s), .06, zz + Math.sign(zz) * 1.6 * s], .027 * s, rope);
-    rod(group, [side * (w / 2 + 2 * s), .02, zz + Math.sign(zz) * 1.6 * s], [side * (w / 2 + 2 * s), .4, zz + Math.sign(zz) * 1.6 * s], .055 * s, pole);
+    const stakeX=side*(w/2+2*s),stakeZ=zz+Math.sign(zz)*1.6*s;
+    const stakeY=position.foundation?pathSurfaceHeight(position.x+stakeX,position.z+stakeZ)-position.y:0;
+    rod(group, [side*w/2,edgeY*.9,zz], [stakeX,stakeY+.06,stakeZ], .027*s, rope);
+    rod(group, [stakeX,stakeY+.02,stakeZ], [stakeX,stakeY+.4,stakeZ], .055*s, pole);
   }
   // Cloth tiebacks, rainfly reinforcement patches and breathable mesh vents.
   for (const side of [-1, 1]) {
@@ -406,7 +409,7 @@ export function createTent(scene, requestedConfig = DEFAULT_TENT, position = {})
   add(mug, new THREE.TorusGeometry(.13 * s, .035 * s, 6, 12), material('#e8dfbd'), .25 * s, 0, 0);
   box(group, .5 * s, .045 * s, .7 * s, material('#d9c699'), -.4 * s, .8 * s, -d * .28);
   const model = {
-    group, shell, skylight, config, dimensions: dims, doorPivot, doorOpen: false,
+    group, shell, skylight, config, dimensions: dims, foundation:position.foundation??null, doorPivot, doorOpen: false,
     roofHeightAt(x,z) {const p=localPosition(origin,x,z);return origin.y+roofY(p.x,p.z);},
     entrance: worldPosition(origin, 0, .14, d / 2 + 1),
     doorPosition: worldPosition(origin, 0, .14, d / 2 + .1),

@@ -1,3 +1,4 @@
+import { createAnimalFace, ANIMAL_FACE_COLORS } from './animal-face.js';
 import * as THREE from 'three';
 
 export const ANIMAL_SPECIES = Object.freeze(['puppy', 'cat', 'sheep', 'raccoon', 'deer']);
@@ -22,21 +23,14 @@ export function createCamper(parent, settings = {}) {
   orb(torsoRig,cream,0,.31,.255,.28,.33,.065);
   const neck=orb(upperBody,fur,0,.76,.015,.18,.15,.17);
   const head=new THREE.Group();head.position.set(0,1.34,.025);upperBody.add(head);
-  const face=orb(head,fur,0,0,.02,.64,.65,.56);face.name='Animal face';
+  const faceAnimation=createAnimalFace(settings.species),faceMaterial=mat('face','#ffffff');faceMaterial.map=faceAnimation.texture;
+  const face=orb(head,faceMaterial,0,0,.02,.64,.65,.56);face.name='Animal face';
   const details=Object.fromEntries(ANIMAL_SPECIES.map(id=>{const g=new THREE.Group();g.name=id+' features';head.add(g);return [id,g];}));
   for(const side of [-1,1]){
-    const eye=orb(head,dark,side*.245,.025,.553,.095,.12,.035);eye.name='Animal eye';
-    orb(head,ivory,side*.245-.025,.065,.582,.027,.034,.012);
-    orb(head,pink,side*.42,-.19,.44,.075,.035,.02);
     const ear=orb(details.puppy,fur,side*.61,-.10,-.01,.23,.48,.14);ear.rotation.z=side*.18;ear.name='Floppy retriever ear';
-    orb(details.puppy,cream,side*.14,-.21,.58,.23,.18,.22);
     const catEar=add(details.cat,cone,fur,side*.44,.5,-.02,.25,.55,.22);catEar.rotation.z=-side*.18;
     add(details.cat,cone,pink,side*.44,.53,.125,.12,.32,.025);
-    for(let n=0;n<3;n++){const w=box(details.cat,cream,side*.45,-.23+n*.07,.57,.38,.012,.013);w.rotation.z=side*(n-1)*.16;}
     const sheepEar=orb(details.sheep,fur,side*.68,.03,-.02,.24,.10,.13);sheepEar.rotation.z=side*.3;
-    orb(details.raccoon,cream,side*.46,-.22,.3,.22,.21,.3);
-    // Eye patches sit around the shared eyes, leaving pupils and highlights visible.
-    orb(details.raccoon,mat('mask','#4d4943'),side*.245,.02,.49,.225,.205,.065);
     orb(details.raccoon,fur,side*.49,.48,-.05,.19,.24,.12);
     orb(details.raccoon,dark,side*.49,.49,.04,.10,.13,.03);
     const deerEar=orb(details.deer,fur,side*.65,.29,-.03,.29,.13,.13);deerEar.rotation.z=side*.55;
@@ -47,10 +41,6 @@ export function createCamper(parent, settings = {}) {
   }
   for(let n=0;n<16;n++){const a=n/16*PI*2;orb(details.sheep,cream,Math.sin(a)*.53,Math.cos(a)*.53,-.03,.17,.18,.19);}
   orb(details.sheep,cream,0,.42,.38,.4,.2,.22);
-  const muzzle=orb(head,cream,0,-.24,.52,.24,.18,.15);
-  const nose=orb(head,dark,0,-.15,.705,.09,.065,.05);nose.name='Animal nose';
-  const mouth=box(head,dark,0,-.29,.663,.025,.10,.018);
-  for(const side of [-1,1]){const smile=orb(head,dark,side*.064,-.335,.64,.066,.016,.014);smile.rotation.z=side*.16;}
   const arms=[],elbows=[],legs=[],knees=[],ankles=[];
   for(const side of [-1,1]){
     const arm=new THREE.Group();arm.position.set(side*.455,.59,0);upperBody.add(arm);arms.push(arm);
@@ -67,6 +57,7 @@ export function createCamper(parent, settings = {}) {
     const hindPaw=orb(ankle,fur,0,0,.075,.165,.13,.21);hindPaw.name='Hind paw';
     for(let n=-1;n<=1;n++)orb(ankle,cream,n*.065,-.015,.273,.023,.035,.012);
   }
+  mat('mask','#4d4943');
   const tails=Object.fromEntries(ANIMAL_SPECIES.map(id=>{const g=new THREE.Group();g.name=id+' tail';g.position.set(0,.85,-.27);body.add(g);return[id,g];}));
   for(let n=0;n<5;n++)orb(tails.puppy,fur,0,.05+n*.045,-n*.13,.14-n*.017,.14-n*.017,.2);
   for(let n=0;n<7;n++)orb(tails.cat,n%2?fur:mat('catStripe','#a47853'),0,n*.065,-n*.11,.105,.11,.16);
@@ -88,24 +79,24 @@ export function createCamper(parent, settings = {}) {
   }
   orb(backpack,canvas,0,.73,-.4,.34,.10,.10);
   const bottle=orb(backpack,mat('bottle','#8fc9cb'),.335,.23,-.4,.074,.18,.074);
-  const model={root,body,upperBody,torsoRig,torso,head,face,legs,knees,ankles,arms,elbows,backpack,neck,materials,bottle,tails,details,settings:{},
+  const model={root,body,upperBody,torsoRig,torso,head,face,legs,knees,ankles,arms,elbows,backpack,neck,materials,bottle,tails,details,faceAnimation,updateFace(time,pose='stand'){return faceAnimation.update(time,pose,this.settings.species);},settings:{},
     configure(next={}){
       const species=ANIMAL_SPECIES.includes(next.species)?next.species:this.settings.species??'puppy';
       this.settings={species};root.name=`Animal camper: ${species}`;
-      const colors={puppy:['#e9bb68','#fff0c8'],cat:['#c99462','#f8e4ca'],sheep:['#e0cfb0','#fff7e3'],raccoon:['#9b9182','#e9e0ce'],deer:['#b98151','#f9e3ba']};
+      const colors=ANIMAL_FACE_COLORS;
       fur.color.set(colors[species][0]);cream.color.set(colors[species][1]);
       for(const id of ANIMAL_SPECIES){details[id].visible=id===species;tails[id].visible=id===species;}
-      spots.visible=species==='deer';muzzle.scale.set(species==='puppy'?.28:.24,species==='puppy'?.19:.18,species==='puppy'?.22:.15);
-      nose.position.z=species==='puppy'?.775:.705;mouth.position.z=species==='puppy'?.75:.663;
+      spots.visible=species==='deer';faceAnimation.update(0,'stand',species);
       return this;
     },
-    dispose(){root.removeFromParent();geometries.forEach(g=>g.dispose());Object.values(materials).forEach(m=>m.dispose());},
+    dispose(){faceAnimation.dispose();root.removeFromParent();geometries.forEach(g=>g.dispose());Object.values(materials).forEach(m=>m.dispose());},
   };
   model.configure(settings);poseCamper(model,'stand');return model;
 }
 
 /** Articulated gameplay poses. Feet are at ground level in stand/sit/crouch. */
 export function poseCamper(model, pose, walking = false, now = 0, detail = {}) {
+  model.updateFace(now/1000,pose);
   const { body, upperBody, legs, knees, ankles, arms, elbows, head } = model;
   const wave = walking ? Math.sin(now * (pose === 'run' ? .013 : .008)) : 0;
   body.position.set(0, 0, 0); body.rotation.set(0, 0, 0);

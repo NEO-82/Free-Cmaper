@@ -1,3 +1,4 @@
+import { campGroundHeight } from './camp-ground.js';
 // Shared world coordinates and collision math. Keep independent of Three.js so
 // hiking, terrain sampling and tests all use exactly the same surface.
 const MAP_SCALE = Math.sqrt(3);
@@ -32,7 +33,7 @@ export function isWater(x, z) {
   const lake = ((x - LAKE.x) / LAKE.radiusX) ** 2 + ((z - LAKE.z) / LAKE.radiusZ) ** 2;
   return lake < 1 || (z >= RIVER_START && Math.abs(x - riverX(z)) < 5.5);
 }
-export function terrainHeight(x, z) {
+export function baseTerrainHeight(x, z) {
   if (!Number.isFinite(x) || !Number.isFinite(z)) return 0;
   const r = Math.hypot(x - SUMMIT.x, z - SUMMIT.z);
   if (r <= SUMMIT.radius) return SUMMIT.height;
@@ -71,6 +72,8 @@ export function terrainHeight(x, z) {
   if(z>=RIVER_START){const bank=Math.abs(x-riverX(z));if(bank<5.5)h=-2.4+2.3*smooth(3.5,5.5,bank);else if(bank<10)h=-.1+(h+.1)*smooth(5.5,10,bank);}
   return h;
 }
+/** Current ground includes the level pad under the active tent only. */
+export function terrainHeight(x,z){return campGroundHeight(x,z,baseTerrainHeight(x,z));}
 // A long curling approach trades the old steep climb for gentle, broad switchbacks.
 const trailStart={x:-40,z:-56},trailRadius=Math.hypot(trailStart.x-SUMMIT.x,trailStart.z-SUMMIT.z);
 const trailAngle=Math.atan2(trailStart.x-SUMMIT.x,trailStart.z-SUMMIT.z);
@@ -120,10 +123,10 @@ export function circleOverlaps(x, z, radius, collider) {
   }
   return false;
 }
-export function canOccupy(x, z, colliders = [], radius = 0.55, { allowWater = false } = {}) {
+export function canOccupy(x, z, colliders = [], radius = 0.55, { allowWater = false, ignoreSlope = false } = {}) {
   if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
   if (x < WORLD.minX + radius || x > WORLD.maxX - radius || z < WORLD.minZ + radius || z > WORLD.maxZ - radius) return false;
-  if (!terrainWalkable(x,z)) return false;
+  if (!ignoreSlope && !terrainWalkable(x,z)) return false;
   if (!allowWater) {
     if (isWater(x, z) || (x > COAST_START && terrainHeight(x, z) < .15)) return false;
     for (let i = 0; i < 8; i++) if (isWater(x + Math.cos(i * Math.PI / 4) * radius, z + Math.sin(i * Math.PI / 4) * radius)) return false;

@@ -1,3 +1,5 @@
+import { createCampGroundView } from './camp-ground-view.js';
+import { setCampGround } from './camp-ground.js';
 import { treePlatforms, rockSurface } from './climbing.js';
 import { createShoreWaves } from './shore-waves.js';
 import * as THREE from 'three';
@@ -89,6 +91,7 @@ function boulderGeometry() {
   geo.computeVertexNormals(); return coloredGeometry(geo, '#ad6e49', '#ffe0ac');
 }
 export function createWorld(scene) {
+  setCampGround(null);let campGroundView=null;
   const group = new THREE.Group(); group.name = 'Painted adventure landscape'; scene.add(group);
   const random = generator(), colliders = [], trees = [], rocks = [], interactables = [], falling = [];
   const width = WORLD.maxX - WORLD.minX, depth = WORLD.maxZ - WORLD.minZ, landWidth = WORLD.landMaxX - WORLD.minX;
@@ -106,7 +109,7 @@ export function createWorld(scene) {
     const x=xs[i%xs.length],z=zs[Math.floor(i/xs.length)];vertices.setXYZ(i,x,pathUnderlayHeight(x,z),z);uvs.setXY(i,(x-WORLD.minX)/width,(WORLD.maxZ-z)/depth);
   }
   terrain.setAttribute('color', new THREE.BufferAttribute(colors, 3)); terrain.computeVertexNormals();
-  mesh(group, terrain, groundMaterial, 0, 0, 0).castShadow = false;
+  const groundMesh=mesh(group,terrain,groundMaterial,0,0,0);groundMesh.castShadow=false;
   const foliageMaterials = [0, 1, 2].map(() => new THREE.MeshStandardMaterial({ color: '#71c746', vertexColors: true, roughness: .88 }));
   const barkMaterials = ['#d5a14f', '#c79749', '#e8d7a1'].map(color => new THREE.MeshStandardMaterial({ color, roughness: .94, map: barkMap }));
   const rockMaterial = new THREE.MeshStandardMaterial({ color: '#e8ba86', vertexColors: true, map: stoneMap, roughness: .92, flatShading: false });
@@ -291,6 +294,7 @@ export function createWorld(scene) {
   interactables.push({ id: 'lake-shore', type: 'water', x: LAKE.x, z: LAKE.z - LAKE.radiusZ - 1, y: 0, radius: 2, text: 'lake' });
   const baseColor = new THREE.Color(), green = new THREE.Color(), cliff = new THREE.Color();
   function updateSeason(index) {
+    campGroundView?.setSeason(index);
     const normals = terrain.attributes.normal;
     for (let i = 0; i < vertices.count; i++) {
       const x = vertices.getX(i), y = vertices.getY(i), z = vertices.getZ(i), patch = Math.sin(x * .037 + Math.cos(z * .05)) * Math.sin(z * .031) * .035;
@@ -307,11 +311,21 @@ export function createWorld(scene) {
     grassMaterial.color.set(['#85d548', '#63c43d', '#c5ba54', '#d9e7d8'][index]); fernMaterial.color.copy(grassMaterial.color);
     flowerMaterial.color.set(['#fff0b5', '#ffedaf', '#edbe7b', '#f4f6f1'][index]);
   }
+  function renderedTerrainHeight(x,z){
+    const cell=(axis,value)=>{let lo=0,hi=axis.length-2;while(lo<hi){const mid=Math.ceil((lo+hi)/2);if(axis[mid]<=value)lo=mid;else hi=mid-1;}return lo;};
+    const ix=cell(xs,x),iz=cell(zs,z),a=iz*xs.length+ix,b=a+xs.length,d=a+1,c=b+1;
+    const u=(x-vertices.getX(a))/(vertices.getX(d)-vertices.getX(a)),v=(z-vertices.getZ(a))/(vertices.getZ(b)-vertices.getZ(a));
+    return u+v<=1?vertices.getY(a)+(vertices.getY(d)-vertices.getY(a))*u+(vertices.getY(b)-vertices.getY(a))*v:vertices.getY(c)+(vertices.getY(b)-vertices.getY(c))*(1-u)+(vertices.getY(d)-vertices.getY(c))*(1-v);
+  }
+  campGroundView=createCampGroundView(group,{baseHeightAt:renderedTerrainHeight,groundMap,worldBounds:WORLD});
+  for(const object of group.children)if(object===groundMesh||object===ferns||object===flowers||object.name==='walkable-path')campGroundView.maskMesh(object);
+  campGroundView.maskMaterial(grassMaterial);
+  for(const item of interactables)if(item.type==='plant')item.object.traverse(o=>{if(o.isMesh)campGroundView.maskMesh(o);});
   updateSeason(0);
   function animate(dt, time, center=SHOP) {
     updateClimbView(center);
     waterTime.value = time; shoreWaves.update(time);
     for (let i = falling.length - 1; i >= 0; i--) { const f = falling[i]; f.time += dt; f.object.rotation.z = Math.min(Math.PI * .48, f.time * f.time * .8) * f.direction; if (f.time > 3.2) { group.remove(f.object); falling.splice(i, 1); } }
   }
-  return { group, terrain, shoreWaves, platformsNear(x,z){return trees.filter(t=>!t.felled&&Math.hypot(t.x-x,t.z-z)<8).flatMap(t=>t.platforms);}, sea, lake, river, trees, rocks, groundCover, updateCover:groundCover.update, colliders, interactables, updateSeason, animate, chopTree, heightAt: terrainHeight };
+  return { group, terrain, groundMesh, campGroundView, setCampGround:campGroundView.setPatch, shoreWaves, platformsNear(x,z){return trees.filter(t=>!t.felled&&Math.hypot(t.x-x,t.z-z)<8).flatMap(t=>t.platforms);}, sea, lake, river, trees, rocks, groundCover, updateCover:groundCover.update, colliders, interactables, updateSeason, animate, chopTree, heightAt: terrainHeight };
 }

@@ -5,10 +5,10 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { resolveMovement, terrainHeight, canOccupy, isWater } from './terrain.js';
 
 export const VEHICLES = Object.freeze({
-  motorhome: Object.freeze({ maxSpeed: 48, acceleration: 12, brake: 28, turnRate: 1.05, radius: 4.2, wheelRadius: .65, length: 8, wheelBase: 5.1, track: 3.1, travel: .4 }),
-  sedan: Object.freeze({ maxSpeed: 64, acceleration: 18, brake: 30, turnRate: 1.45, radius: 2.8, wheelRadius: .55, length: 5.8, wheelBase:3.7, track:2.56, travel:.3 }),
-  suv: Object.freeze({ maxSpeed: 56, acceleration: 16, brake: 30, turnRate: 1.3, radius: 3, wheelRadius: .67, length: 6.2, wheelBase:4, track:2.74, travel:.44 }),
-  scooter: Object.freeze({ maxSpeed: 40, acceleration: 14, brake: 24, turnRate: 1.9, radius: 1.35, wheelRadius: .40, length: 2.8, wheelBase:1.84, track:0, travel:.20 }),
+  motorhome: Object.freeze({ maxSpeed: 48 * 2 / 3, acceleration: 12, brake: 28, turnRate: 1.05, radius: 4.2, wheelRadius: .65, length: 8, wheelBase: 5.1, track: 3.1, travel: .4 }),
+  sedan: Object.freeze({ maxSpeed: 64 * 2 / 3, acceleration: 18, brake: 30, turnRate: 1.45, radius: 2.8, wheelRadius: .55, length: 5.8, wheelBase:3.7, track:2.56, travel:.3 }),
+  suv: Object.freeze({ maxSpeed: 56 * 2 / 3, acceleration: 16, brake: 30, turnRate: 1.3, radius: 3, wheelRadius: .67, length: 6.2, wheelBase:4, track:2.74, travel:.44 }),
+  scooter: Object.freeze({ maxSpeed: 40 * 2 / 3, acceleration: 14, brake: 24, turnRate: 1.9, radius: 1.35, wheelRadius: .40, length: 2.8, wheelBase:1.84, track:0, travel:.20 }),
 });
 const approach = (v, target, step) => v < target ? Math.min(target, v + step) : Math.max(target, v - step);
 /** WASD drive: W/S forward/reverse, A/D steering, Space brake. No road constraint. */

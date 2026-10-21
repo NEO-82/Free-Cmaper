@@ -1,8 +1,24 @@
 import * as THREE from 'three';
-import { WORLD, SHOP, SUMMIT, terrainHeight, isWater } from './terrain.js';
+import { WORLD, SHOP, SUMMIT, terrainHeight, isWater, canOccupy } from './terrain.js';
+
+export const DANGEROUS_SPECIES=Object.freeze(['bear','snake','wolf']);
+export function dangerHours(hour){const h=((hour%24)+24)%24;return Number.isFinite(h)&&(h>=23||h<6);}
+/** Called once per existing hourly encounter tick, never every render frame. */
+export function dangerEncounter({hour,active=false,safe=false,clean=false,protectedCamp=false,random=Math.random}){return !active&&!safe&&dangerHours(hour)&&random()<(clean&&protectedCamp?.005:.05);}
+export function wildlifePosition(random=Math.random,{around=null,colliders=[]}={}){
+  for(let attempt=0;attempt<(around?40:1000);attempt++){
+    const angle=random()*Math.PI*2,distance=6+random()*4;
+    const x=around?around.x+Math.sin(angle)*distance:WORLD.minX+35+random()*(WORLD.landMaxX-WORLD.minX-70);
+    const z=around?around.z+Math.cos(angle)*distance:WORLD.minZ+35+random()*(WORLD.maxZ-WORLD.minZ-70);
+    if(!canOccupy(x,z,colliders,1)||Math.hypot(x-SHOP.x,z-SHOP.z)<=26||Math.hypot(x-SUMMIT.x,z-SUMMIT.z)<=SUMMIT.radius+12)continue;
+    const y=terrainHeight(x,z);if(around&&Math.abs(y-around.y)>3)continue;
+    return {x,y,z};
+  }
+  return null;
+}
 
 /** Locally modelled, stylized wildlife. Roots sit on the terrain, feet at y=0. */
-export function createWildlife(scene) {
+export function createWildlife(scene,{random=Math.random,colliders=[]}={}) {
   const sphere = new THREE.SphereGeometry(1, 14, 10);
   const cone = new THREE.ConeGeometry(1, 1, 8);
   const cylinder = new THREE.CylinderGeometry(1, 1, 1, 7);
@@ -107,25 +123,41 @@ export function createWildlife(scene) {
     piece(root, '#675f48', [0, .31, -.31], [.18, .1, .25]);
     return { head, wings };
   }
-  let seed = 54721;
-  const rand = () => { seed = seed * 16807 % 2147483647; return (seed - 1) / 2147483646; };
+  function bear(root){
+    piece(root,'#805e43',[0,1.12,-.1],[.75,.82,1.05]);piece(root,'#a47d56',[0,1.28,.66],[.52,.58,.35]);
+    for(const x of [-.46,.46])for(const z of [-.65,.62]){piece(root,'#674e3b',[x,.5,z],[.22,.42,.24],cylinder);piece(root,'#594537',[x,.13,z+.08],[.27,.13,.34]);}
+    const head=groupAt(root,0,1.9,.85);piece(head,'#805e43',[0,0,0],[.52,.49,.5]);piece(head,'#bf9c70',[0,-.16,.4],[.3,.25,.3]);piece(head,'#302e2a',[0,-.07,.65],[.17,.1,.09]);
+    for(const side of [-1,1]){piece(head,'#805e43',[side*.38,.4,-.04],[.19,.2,.14]);piece(head,'#bf9c70',[side*.38,.4,.07],[.11,.11,.035]);}
+    eyes(head,.24,.1,.4,.06);const tail=piece(root,'#805e43',[0,1.2,-1.1],[.2,.2,.18]);return {head,tail};
+  }
+  function wolf(root){
+    const rig=fox(root),colors={'#c87834':'#7c8790','#d38b43':'#87929a','#a55c2e':'#59666e','#e5be99':'#aab2b3','#f1dec1':'#d4d8cc','#f4e6cd':'#d4d8cc'};
+    root.traverse(o=>{if(o.isMesh){const replacement=colors['#'+o.material.color.getHexString()];if(replacement)o.material=mat(replacement);}});
+    piece(root,'#aab2b3',[0,.92,.24],[.43,.47,.39]);root.scale.setScalar(1.3);return rig;
+  }
+  function snake(root){
+    const points=Array.from({length:16},(_,i)=>new THREE.Vector3(Math.sin(i*.7)*.25,.14,-1.5+i*.18));
+    const body=piece(root,'#7e8e51',[0,0,0],[1,1,1],new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),48,.14,8,false));
+    const end=points.at(-1),head=groupAt(root,end.x,.23,end.z+.08);piece(head,'#8b9b58',[0,0,.1],[.23,.15,.32]);eyes(head,.14,.05,.3,.035);
+    for(const side of [-1,1]){const tongue=piece(head,'#c87871',[side*.025,-.025,.5],[.012,.012,.13]);tongue.rotation.y=side*.12;}
+    return {head,body};
+  }
+  const rand=random;
   const animals = [];
   for (let i = 0; i < 12; i++) {
     const root = new THREE.Group(); root.name = `wildlife-${i}`;
     const nocturnal = i >= 6, type = nocturnal ? i % 2 ? 'owl' : 'fox' : i % 2 ? 'rabbit' : 'deer';
     const rig = ({ deer, rabbit, fox, owl })[type](root);
-    let x, z;
-    for (let attempt = 0; attempt < 1000; attempt++) {
-      x = WORLD.minX + 35 + rand() * (WORLD.landMaxX - WORLD.minX - 70);
-      z = WORLD.minZ + 35 + rand() * (WORLD.maxZ - WORLD.minZ - 70);
-      if (!isWater(x, z) && Math.hypot(x - SHOP.x, z - SHOP.z) > 26 && Math.hypot(x - SUMMIT.x, z - SUMMIT.z) > SUMMIT.radius + 12) break;
-    }
-    // A pair near the starting woodland makes the new models discoverable.
-    if (i === 1) { x = -55; z = -6; }
-    if (i === 6) { x = -67; z = 19; }
+    const point=wildlifePosition(rand,{colliders});if(!point)continue;
+    const {x,z}=point;
     root.position.set(x, terrainHeight(x, z), z); root.rotation.y = rand() * Math.PI * 2;
-    root.userData = { nocturnal, species: type, groundOffset: 0, rig, phase: rand() * Math.PI * 2 };
+    root.userData = { nocturnal, dangerous:false, species: type, groundOffset: 0, rig, phase: rand() * Math.PI * 2 };
     root.visible = !nocturnal; scene.add(root); animals.push(root);
+  }
+  for(const species of DANGEROUS_SPECIES){
+    const root=new THREE.Group();root.name='dangerous-'+species;
+    const rig=({bear,snake,wolf})[species](root);root.userData={species,dangerous:true,nocturnal:true,groundOffset:0,rig,phase:rand()*Math.PI*2};
+    root.visible=false;scene.add(root);animals.push(root);
   }
   return animals;
 }
@@ -136,6 +168,7 @@ export function animateWildlife(animals, time, dt = 0) {
     const { rig, phase, species } = animal.userData, t = time * 0.8 + phase;
     rig.head.rotation.y = Math.sin(t * .7) * .14;
     rig.head.rotation.x = Math.sin(t) * (species === 'owl' ? .045 : .025);
+    if(rig.body)rig.body.scale.x=1+Math.sin(t*2)*.025;
     if (rig.tail) rig.tail.rotation.z = Math.sin(t * 1.8) * .1;
     if (rig.ears) rig.ears.forEach((ear, i) => { ear.rotation.z = (i ? -1 : 1) * .12 + Math.sin(t * 2 + i) * .055; });
     if (rig.wings) rig.wings.forEach((wing, i) => { wing.rotation.z = (i ? -1 : 1) * (.1 + Math.sin(t) * .025); });

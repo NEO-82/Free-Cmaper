@@ -10,7 +10,8 @@ test('animal camper retains its articulated limbs, small hiking pack and gamepla
   assert.equal(scene.children[0], model.root);
   assert.equal(model.legs.length, 2); assert.equal(model.knees.length, 2); assert.equal(model.ankles.length, 2);
   assert.equal(model.arms.length, 2); assert.equal(model.elbows.length, 2);
-  assert.ok(model.head.children.length >= 15);
+  assert.ok(model.face.material.map.isDataTexture);
+  assert.equal(model.head.children.filter(o=>o.isMesh).length,1,'only the head silhouette is a facial mesh');
   assert.ok(model.backpack.getObjectById(model.bottle.id));
   assert.ok(bounds(model).max.y > 2.6 && bounds(model).max.y < 3);
   assert.ok(Math.abs(bounds(model).min.y) < .01);
