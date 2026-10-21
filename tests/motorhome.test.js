@@ -5,8 +5,8 @@ import { createMotorhomeInterior, normalizeInterior, MOTORHOME_SIZE, motorhomeBo
 import { VEHICLES, stepDrive } from '../src/vehicles.js';
 import { TRAVEL_CHOICES, isPrivateVehicle } from '../src/journey.js';
 
-test('vehicles have two-thirds of their previous speed limits and motorhome is a compact private travel option',()=>{
-  assert.deepEqual(['sedan','suv','scooter','motorhome'].map(k=>VEHICLES[k].maxSpeed),[64,56,40,48].map(v=>v*2/3));
+test('vehicles have fifty percent higher speed limits and motorhome is a compact private travel option',()=>{
+  assert.deepEqual(['sedan','suv','scooter','motorhome'].map(k=>VEHICLES[k].maxSpeed),[64,56,40,48]);
   assert.ok(TRAVEL_CHOICES.includes('motorhome'));assert.ok(isPrivateVehicle('motorhome'));
   assert.deepEqual(MOTORHOME_SIZE,{width:4.18,length:8.8,height:4.51});
   assert.equal(VEHICLES.motorhome.wheelBase,5.61);assert.equal(VEHICLES.motorhome.track,3.41);

@@ -1,5 +1,5 @@
 import { naturalPathSurfaceHeight } from './paths.js';
-import { canOccupy } from './terrain.js';
+import { canOccupy, tunnelAt } from './terrain.js';
 
 const SIZE_SCALE = Object.freeze({ standard: 1, large: 1.25, family: 1.5 });
 
@@ -27,7 +27,7 @@ export function findCampLocation(player, tentConfig = {}, colliders = []) {
   const offsets = [[8 * scale, 0], [-8 * scale, 0], [0, -9 * scale], [0, 9 * scale], [0, 0]];
   for (const [ox, oz] of offsets) {
     const x = player.x + ox, z = player.z + oz;
-    if (!footprintClear({ x, z, width, depth }, colliders)) continue;
+    if (tunnelAt(x,z)||!footprintClear({ x, z, width, depth }, colliders)) continue;
     let valid = true;
     for (let i = 0; i <= 4 && valid; i++) for (let j = 0; j <= 4; j++) {
       const sx = x - halfW + i / 4 * width, sz = z - halfD + j / 4 * depth;

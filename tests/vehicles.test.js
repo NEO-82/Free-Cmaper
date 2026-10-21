@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { VEHICLES, createVehicle, stepDrive, dismountPosition } from '../src/vehicles.js';
 import { PARKING } from '../src/journey.js';
-import { WORLD, canOccupy, isWater } from '../src/terrain.js';
+import { WORLD, canOccupy, isWater, shoreCrossings } from '../src/terrain.js';
 const initial=kind=>({kind,...PARKING,heading:Math.PI/2,speed:0});
-function advance(state,input,seconds,colliders=[]){for(let i=0;i<seconds*60;i++)state=stepDrive(state,input,1/60,colliders);return state;}
+function advance(state,input,seconds,colliders=[],environment={}){for(let i=0;i<seconds*60;i++)state=stepDrive(state,input,1/60,colliders,environment);return state;}
 
 test('all four vehicles accelerate, reverse, steer and stop with the same WASD/brake inputs',()=>{
   for(const kind of Object.keys(VEHICLES)){
@@ -23,7 +23,7 @@ test('high-speed cars cannot tunnel through trees/buildings, enter the sea or le
     const wall=[{kind:'box',minX:s.x+8,maxX:s.x+9,minZ:s.z-30,maxZ:s.z+30}];
     const hit=advance(s,{forward:true},3,wall);assert.ok(hit.x<=s.x+8-VEHICLES[kind].radius+.01);assert.ok(hit.blocked||hit.speed<1);
     const edge={...s,x:WORLD.minX+VEHICLES[kind].radius+.1,heading:-Math.PI/2};assert.ok(advance(edge,{forward:true},1).x>=WORLD.minX+VEHICLES[kind].radius);
-    const sea={...s,x:WORLD.landMaxX-VEHICLES[kind].radius-10,z:0};const stopped=advance(sea,{forward:true},2);assert.equal(isWater(stopped.x,stopped.z),false);
+    const sea={...s,x:shoreCrossings(0).at(-1)-VEHICLES[kind].radius-10,z:0};const stopped=advance({...sea,bodyY:0},{forward:true},2,[],{heightAt:()=>0});assert.equal(isWater(stopped.x,stopped.z),false);
   }
 });
 

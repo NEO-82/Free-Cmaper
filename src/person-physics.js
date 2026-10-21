@@ -1,7 +1,7 @@
 import { pathSurfaceHeight } from './paths.js';
 import { WORLD, terrainHeight, terrainSlope, isWater, COAST_START, circleOverlaps } from './terrain.js';
 
-export const PERSON = Object.freeze({ radius:.5, height:2.8, step:.34, gravity:18, jumpSpeed:8.8*Math.SQRT2, acceleration:55, airControl:12 });
+export const PERSON = Object.freeze({ radius:.5, height:2.8, step:.34, gravity:18, jumpSpeed:8.8*Math.sqrt(1.2), acceleration:55, airControl:12 });
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const approach=(v,target,step)=>v<target?Math.min(target,v+step):Math.max(target,v-step);
 export function createPerson(position){return {x:position.x,y:position.y??terrainHeight(position.x,position.z),z:position.z,vx:0,vy:0,vz:0,grounded:true,swimming:false,diveDepth:0,supportId:null,landed:false,swimBlend:0,airSpeedScale:1};}

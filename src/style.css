@@ -24,3 +24,103 @@
 #rv-controls select {font:inherit;padding:10px;border-radius:8px;background:#f4efdd;color:#264b3c;}
 
 #mini-map{width:100%;height:100%;display:block}.map{background:#8bcad0!important;overflow:hidden}#home .travel-grid{margin:10px 0;gap:7px}#home .travel-grid button{padding:10px 6px}
+
+.backpack-bubble{width:min(580px,calc(100vw - 24px));transform:translate(-50%,-50%);max-height:88dvh;overflow:auto;pointer-events:auto}.backpack-bubble::after{display:none}.backpack-bubble #backpack-close{display:block}.backpack-bubble #camp-actions{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.backpack-bubble h3{color:#698361;margin:14px 0 8px}.backpack-bubble #rv-controls{display:grid;gap:8px}.backpack-bubble #rv-controls label{display:flex;align-items:center;gap:12px}.backpack-bubble select{background:#e9eed7;color:#536d50}.backpack-bubble .inventory-grid{max-height:160px}.backpack-bubble footer{display:none}
+
+@font-face{font-family:CampingBalloon;src:url(data:font/woff;base64,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) format('woff');font-display:swap}
+#title-screen h1{font-family:CampingBalloon,'Arial Rounded MT Bold',sans-serif;font-size:clamp(60px,8.5vw,122px);font-weight:400;letter-spacing:-3px;line-height:1.25;color:#ffdc9a;-webkit-text-stroke:9px #9c604e;paint-order:stroke fill;text-shadow:0 6px 0 #885141,0 11px 0 #75473b,0 16px 25px #273e3740;max-width:650px;word-break:keep-all;white-space:normal;transform:rotate(-3deg)}.title-content{max-width:650px}.title-content .brand{margin-bottom:65px}.title-content p{max-width:420px}.title-nav button{background:#fff4d4d9;color:#41634e;border:3px solid #fffae9;box-shadow:0 5px 0 #8a705b40;font-weight:700}.title-screen{background:linear-gradient(90deg,#1b383d65,transparent 70%)}@media(max-width:700px){#title-screen h1{font-size:68px;-webkit-text-stroke:6px #9c604e}.title-content{max-width:330px}.title-content .brand{margin-bottom:36px}.title-nav button{width:190px}}
+
+/*! Title font subset: Copyright 2018 The Jua Project Authors
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
+ */

@@ -4,7 +4,7 @@ export function restStep(progress,target,dt) {return Math.max(0,Math.min(1,progr
 export function smoothRest(progress) {const t=clamp(progress);return t*t*(3-2*t);}
 /** Sit on the mattress, recline onto the back, then gently settle. */
 export function poseBedRest(model,progress,seconds=0) {
-  model.updateFace(seconds,'rest');
+  model.updateFace(seconds,'rest');model.hat.visible=model.settings.species==='male'&&progress<.2;
   const t=clamp(progress),sit=smoothRest(t/.35),recline=smoothRest((t-.3)/.7),mix=(a,b,f)=>a+(b-a)*f;
   const {body,upperBody,head,legs,knees,arms,elbows,ankles,backpack}=model;
   body.position.set(0,mix(-.28*sit,.70,recline),0);body.rotation.set(-Math.PI/2*recline,0,0);

@@ -1,12 +1,11 @@
 import * as THREE from 'three';
-import { WORLD, ISLAND, islandCoastPoint, terrainHeight } from './terrain.js';
+import { WORLD, ISLAND, islandCoastPoint, islandCoastNormal, shoreCrossings, terrainHeight } from './terrain.js';
 
 /** Still-water coastline follows the real beach rather than a straight decoration. */
 export function shorelineX(z) {
-  let lo=ISLAND.x,hi=WORLD.maxX;
-  if(terrainHeight(lo,z)<=0)return ISLAND.x;
-  for(let i=0;i<24;i++){const mid=(lo+hi)/2;if(terrainHeight(mid,z)>0)lo=mid;else hi=mid;}
-  return (lo+hi)/2;
+  const edges=shoreCrossings(z);if(!edges.length)return WORLD.landMaxX;
+  let hi=edges.at(-1)+2,lo=hi-90;
+  for(let i=0;i<24;i++){const mid=(lo+hi)/2;if(terrainHeight(mid,z)>0)lo=mid;else hi=mid;}return (lo+hi)/2;
 }
 export function shoreWaveHeight(distance,z,time) {
   const fade=Math.max(0,1-distance/70);
@@ -18,9 +17,9 @@ export function foamFront(z,time) {return 2+1.2*Math.sin(time*.8+z*.023);}
 export function createShoreWaves(parent) {
   const across=32,along=640,positions=[],distances=[],indices=[];
   for(let row=0;row<=along;row++){
-    const a=row/along*Math.PI*2,edge=islandCoastPoint(a),normal=new THREE.Vector2(Math.cos(a)/ISLAND.rx,Math.sin(a)/ISLAND.rz).normalize();
+    const a=row/along*Math.PI*2,edge=islandCoastPoint(a),normal=islandCoastNormal(a);
     for(let col=0;col<=across;col++){
-      const d=-.8+70.8*col/across;positions.push(edge.x+normal.x*(d-4),.05,edge.z+normal.y*(d-4));distances.push(d);
+      const d=-.8+70.8*col/across;positions.push(edge.x+normal.x*(d-4),.05,edge.z+normal.z*(d-4));distances.push(d);
       if(row&&col<across){const a=row*(across+1)+col,b=a-across-1;indices.push(b,b+1,a,b+1,a+1,a);}
     }
   }

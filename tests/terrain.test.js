@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WORLD, SCENERY, SHOP, SHOP_SITES, SUMMIT, SUMMITS, MOUNTAINS, BRIDGE, MAINLAND, LAKE, TRAILS, coastDistance, riverX, terrainHeight, isWater, canOccupy, trailPoint, resolveMovement, terrainSlope, terrainWalkable } from '../src/terrain.js';
+import { WORLD, SCENERY, SHOP, SHOP_SITES, SUMMIT, SUMMITS, MOUNTAINS, BRIDGE, MAINLAND, LAKE, TRAILS, coastDistance, riverX, terrainHeight, isWater, canOccupy, trailPoint, resolveMovement, terrainSlope, terrainWalkable, shoreCrossings } from '../src/terrain.js';
 
 const close = (actual, expected, tolerance = 1e-6) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} should be close to ${expected}`);
 
@@ -106,13 +106,13 @@ test('distant background bounds stay unchanged while all four playable borders h
 });
 
 test('swimmers cross the beach and sea while camps and animals still require dry ground', () => {
-  const start={x:WORLD.landMaxX-40,z:0};
+  const shore=shoreCrossings(0).at(-1);const start={x:shore-40,z:0};
   const swimmer=resolveMovement(start,{x:70,z:0},[],.55,{allowWater:true});
-  close(swimmer.x,WORLD.landMaxX+30);
+  close(swimmer.x,shore+30);
   assert.equal(isWater(swimmer.x,swimmer.z),true);
   const dry=resolveMovement(start,{x:70,z:0});assert.equal(isWater(dry.x,dry.z),false);
-  const rock={kind:'circle',x:WORLD.landMaxX+10,z:0,radius:2};
-  const blocked=resolveMovement({x:WORLD.landMaxX,z:0},{x:30,z:0},[rock],.55,{allowWater:true});
+  const rock={kind:'circle',x:shore+10,z:0,radius:2};
+  const blocked=resolveMovement({x:shore,z:0},{x:30,z:0},[rock],.55,{allowWater:true});
   assert.ok(blocked.x<rock.x-2);
 });
 

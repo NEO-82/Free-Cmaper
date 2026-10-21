@@ -1,3 +1,4 @@
+import {picnicNotes,PICNIC_BPM} from './picnic-score.js';
 /** Original synthesized music and SFX: no network, media files or autoplay dependency. */
 export function createAudio() {
   let context, musicBus, sfxBus, ambientBus, noise, ambientFilter, timer, nextBeat=0, beat=0, mode='calm', available=true;
@@ -23,10 +24,13 @@ export function createAudio() {
         tone(midi([69,72,68,71][beat%4]),nextBeat,.15,.065,'sine');
         if(beat%2===0)tone(82,nextBeat,.11,.25,'triangle');nextBeat+=.28;
       }else{
-        const roots=[48,53,55,48],root=roots[Math.floor(beat/8)%4];
-        if(beat%4===0){tone(midi(root),nextBeat,2.6,.14);tone(midi(root+7),nextBeat+.025,2.3,.065);tone(midi(root+16),nextBeat+.05,2.1,.05);}
-        const melody=[72,76,79,76,74,72,69,67,69,72,76,79,81,79,76,72];
-        tone(midi(melody[beat%melody.length]),nextBeat,1.25,.095,'triangle');nextBeat+=.64;
+        for(const event of picnicNotes(beat)){
+          const type={bass:'triangle',guitar:'triangle',bell:'sine',flute:'sine',shaker:'triangle'}[event.voice];
+          tone(midi(event.note),nextBeat+event.offset,event.duration,event.gain,type);
+          if(event.voice==='guitar')tone(midi(event.note)*2,nextBeat+event.offset,.13,event.gain*.18,'sine');
+          if(event.voice==='flute')tone(midi(event.note)*2,nextBeat+event.offset,event.duration,event.gain*.12,'sine');
+        }
+        nextBeat+=60/PICNIC_BPM/2;
       }beat++;
     }
   }

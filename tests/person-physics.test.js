@@ -8,7 +8,7 @@ function simulate(state,input,seconds,env=flat){for(let i=0;i<seconds*120;i++)st
 test('jump has world-space momentum and gravity, lands without sinking, and cannot jump again in midair',()=>{
   let p=createPerson({x:0,y:0,z:0});assert.equal(jumpPerson(p),true);assert.equal(jumpPerson(p),false);
   let peak=0;for(let i=0;i<180;i++){p=stepPerson(p,{x:1,z:0,speed:8},1/120,flat);peak=Math.max(peak,p.y);}
-  assert.ok(peak>4.2&&peak<4.4);assert.ok(p.x>7);assert.equal(p.y,0);assert.equal(p.grounded,true);
+  assert.ok(peak>2.5&&peak<2.6);assert.ok(p.x>7);assert.equal(p.y,0);assert.equal(p.grounded,true);
   const held=stepPerson(p,{},0,flat);assert.deepEqual(held,p);
 });
 test('jump clears a low obstacle while tall walls still block a sprint-sized movement',()=>{
@@ -33,7 +33,7 @@ test('falling into deep water activates buoyancy, dive/rise, and an actual shall
   const surface=p.y;p=simulate(p,{speed:0,dive:true},.15,{});assert.ok(p.diveDepth>0);p=simulate(p,{speed:0,rise:true},2,{});assert.equal(p.diveDepth,0);
   p=simulate(p,{x:1,speed:3.4},6,{});assert.ok(p.x>x+7);assert.equal(p.swimming,false);assert.equal(p.grounded,true);
 });
-test('the entire new curling trail has a gentle grade across its usable width and is physically walkable',()=>{
+test('the entire switchback trail has a gentle grade across its usable width and is physically walkable',()=>{
   let previous=trailPoint(0),length=0,maxGrade=0;let p=createPerson({...previous,y:terrainHeight(previous.x,previous.z)});
   for(let i=1;i<=TRAIL_SAMPLES;i++){
     const next=trailPoint(i/TRAIL_SAMPLES),dx=next.x-previous.x,dz=next.z-previous.z,d=Math.hypot(dx,dz);length+=d;

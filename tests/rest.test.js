@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {createCamper,ANIMAL_SPECIES} from '../src/characters.js';
+import {createCamper,CHARACTER_STYLES} from '../src/characters.js';
 import {restStep,poseBedRest} from '../src/rest.js';
 
 test('lying down bends into a seated pose before reclining face-up and putting the pack aside',()=>{
@@ -27,13 +27,13 @@ test('rest animation progresses continuously, reverses to get up, and freezes wh
 
 test('the larger head reclines face-up above the bedding and the first-person camera stays at its eyes',()=>{
   const model=createCamper(new THREE.Scene());model.root.position.y=.14;
-  for(const species of ANIMAL_SPECIES){
+  for(const species of CHARACTER_STYLES){
     model.configure({species});poseBedRest(model,1);model.root.updateMatrixWorld(true);
     const faceUp=new THREE.Vector3(0,0,1).transformDirection(model.head.matrixWorld);
     assert.ok(faceUp.y>.999);
     const eye=model.head.localToWorld(new THREE.Vector3(0,0,.58));
     assert.ok(eye.distanceTo(new THREE.Vector3(0,1.91,-2.02))<.04);
-    assert.ok(new THREE.Box3().setFromObject(model.head,true).min.y>.69);
+    const visibleHead=new THREE.Box3();model.head.traverseVisible(o=>{if(o.isMesh){o.geometry.computeBoundingBox();visibleHead.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));}});assert.ok(visibleHead.min.y>.69);assert.equal(model.hat.visible,false);
   }
   model.dispose();
 });

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {createCamper} from './characters.js';
 import { pathSurfaceHeight } from './paths.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
@@ -216,33 +217,9 @@ export function createShop(scene, position) {
   for (let i = 0; i < 4; i++) folded.push({ position: [3.8, 2.23 + i * .16, -3.65], color: ['#dd9f63', '#77a37e', '#d8c996', '#5f8eac'][i] });
   instances(group, new RoundedBoxGeometry(1.05, .15, .7, 1, .06), material('#ffffff'), folded);
   lantern(group, -.5, 2.45, -3.8, metal, glow);
-  const owner = new THREE.Group(); owner.position.set(3, .3, -5.7); group.add(owner);
-  const skin = material('#e6b78c'), shirt = material('#e5b657'), trousers = material('#486c67'), hair = material('#c5c1aa');
-  box(owner, .83, 1.1, .52, shirt, 0, 1.46, 0);
-  add(owner, new THREE.CylinderGeometry(.16, .18, .27, 10), skin, 0, 2.03, 0);
-  const face = add(owner, new THREE.SphereGeometry(.44, 20, 14), skin, 0, 2.4, 0); face.scale.set(.98, 1.05, .92);
-  add(owner, new THREE.SphereGeometry(.11, 12, 8), skin, 0, 2.37, .395).scale.set(.8, .8, 1.35);
-  for (const x of [-.43, .43]) add(owner, new THREE.SphereGeometry(.105, 12, 8), skin, x, 2.4, -.015).scale.set(.65, 1, .85);
-  const hairCap = add(owner, new THREE.SphereGeometry(.455, 18, 12), hair, 0, 2.57, -.07); hairCap.scale.set(1.02, .68, .94);
-  for (let i = 0; i < 5; i++) add(owner, new THREE.IcosahedronGeometry(.16, 1), hair, -.3 + i * .15, 2.68 + Math.sin(i) * .04, -.02).scale.set(.85, .75, 1.3);
-  for (const x of [-.19, .19]) {
-    add(owner, new THREE.CapsuleGeometry(.14, .5, 4, 8), trousers, x, .56, 0);
-    box(owner, .31, .2, .46, material('#514537'), x, .14, .08);
-  }
-  for (const x of [-.54, .54]) {
-    add(owner, new THREE.CapsuleGeometry(.14, .37, 4, 8), shirt, x, 1.55, 0).rotation.z = x < 0 ? -.12 : .12;
-    add(owner, new THREE.SphereGeometry(.14, 12, 8), skin, x, 1.15, .04);
-  }
-  box(owner, .56, .75, .08, trousers, 0, 1.34, .31);
-  box(owner, .33, .25, .035, material('#609083'), 0, 1.25, .37);
-  for (const x of [-.23, .23]) box(owner, .045, .45, .04, trousers, x, 1.87, .28);
-  for (const x of [-.15, .15]) {
-    add(owner, new THREE.SphereGeometry(.085, 12, 8), material('#fff4df'), x, 2.47, .365).scale.set(.7, .9, .3);
-    add(owner, new THREE.SphereGeometry(.043, 10, 8), material('#3e4c3a'), x, 2.47, .392);
-    add(owner, new THREE.SphereGeometry(.015, 6, 4), material('#ffffff'), x + .012, 2.487, .429);
-    const brow = box(owner, .14, .035, .04, material('#837761'), x, 2.62, .35); brow.rotation.z = x < 0 ? .12 : -.12;
-  }
-  const smile = add(owner, new THREE.TorusGeometry(.10, .015, 6, 16, Math.PI), material('#ad7259'), 0, 2.25, .37); smile.rotation.z = Math.PI;
+  const ownerModel=createCamper(group,{species:Math.round(Math.abs(origin.x))%2?'female':'male'}),owner=ownerModel.root;
+  owner.position.set(3,.3,-5.7);ownerModel.backpack.visible=false;ownerModel.materials.cream.color.set('#d9b46a');
+  let ownerTime=0;
   label(group, 'WELCOME / 숲길 상점', 3, 4.25, -8.1, 8, 1);
   for (let i = 0; i < 5; i++) {
     const x = -5 + i;
@@ -287,8 +264,8 @@ export function createShop(scene, position) {
         collider(origin, 8.8, 9.2, 11.2, 11.6, true, 'shop-porch-post'),
       ];
     },
-    update(dt) { owner.rotation.y = Math.sin(performanceNow() * .0005) * .06; },
-    dispose() { disposeGroup(group); },
+    update(dt) { ownerTime+=dt;owner.rotation.y=Math.sin(ownerTime*.5)*.06;if(this.interior)ownerModel.updateFace(ownerTime); },
+    dispose() { ownerModel.dispose();disposeGroup(group); },
   };
   return model;
 }

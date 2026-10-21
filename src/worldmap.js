@@ -1,4 +1,4 @@
-import { WORLD, SHOP_SITES, MOUNTAINS, LAKE, terrainHeight, isWater, coastDistance, TRAILS, ROAD_NETWORK, roadPoint, BRIDGE } from './terrain.js';
+import { WORLD, VILLAGE_SITES, SHOP_SITES, MOUNTAINS, LAKE, landscapeHeight as terrainHeight, isDesert, isWater, coastDistance, TRAILS, ROAD_NETWORK, roadPoint, BRIDGE } from './terrain.js';
 import { ARRIVAL, arrivalRoadPoint } from './journey.js';
 export function mapPoint(x, z, width, height) { return { x: (x - WORLD.minX) / (WORLD.maxX - WORLD.minX) * width, y: (z - WORLD.minZ) / (WORLD.maxZ - WORLD.minZ) * height }; }
 export function createWorldMap(canvas,{size=1000,labels=true}={}) {
@@ -8,7 +8,7 @@ export function createWorldMap(canvas,{size=1000,labels=true}={}) {
   const b = base.getContext('2d');
   for (let px = 0; px < base.width; px++) for (let py = 0; py < base.height; py++) {
     const x = WORLD.minX + px / base.width * (WORLD.maxX - WORLD.minX), z = WORLD.minZ + py / base.height * (WORLD.maxZ - WORLD.minZ), y = terrainHeight(x, z);
-    b.fillStyle = isWater(x, z) ? '#88c9cf' : coastDistance(x,z)<40 ? '#ead2a0' : y > 130 ? '#c2b69d' : y > 65 ? '#a6ac87' : y > 25 ? '#a3bc88' : '#bdd49b'; b.fillRect(px, py, 1, 1);
+    b.fillStyle = isWater(x, z) ? '#88c9cf' : isDesert(x,z) ? '#e1ba77' : coastDistance(x,z)<40 ? '#ead2a0' : y > 130 ? '#c2b69d' : y > 65 ? '#a6ac87' : y > 25 ? '#a3bc88' : '#bdd49b'; b.fillRect(px, py, 1, 1);
   }
   return { draw({ player, vehicle, camp, heading = 0, t }) {
     const c = canvas.getContext('2d'); c.drawImage(base, 0, 0, width, height);
@@ -26,6 +26,7 @@ export function createWorldMap(canvas,{size=1000,labels=true}={}) {
     for(const shop of SHOP_SITES)marker(shop.x,shop.z,t('shop'),'#987b57');
     for(const m of MOUNTAINS)marker(m.x,m.z,`${m.drivable?'⚑':'▲'} ${m.height}m`,'#7d7465');
     if(labels)marker((BRIDGE.startX+BRIDGE.endX)/2,BRIDGE.z,'500m','#7e9796',0,-15);
+    for(const v of VILLAGE_SITES)marker(v.x,v.z,v.name,'#a77b62',12,22);
     marker(LAKE.x,LAKE.z,t('lakeside'),'#5d9eaa');
     if (camp) marker(camp.x, camp.z, t('mapCamp'), '#bf8862', 10, 23);
     if (vehicle) marker(vehicle.x, vehicle.z, t(vehicle.kind), '#ba9471', 12, 56);

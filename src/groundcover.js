@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
 /** Reuse a small tile pool: dense grass follows the player across the entire world. */
-export function createGroundCover(parent, {geometry,material,heightAt,allowed,tileSize=16,radius=3,density=1.5}) {
-  const root=new THREE.Group(); root.name='Dense ground cover';parent.add(root);
+export function createGroundCover(parent, {geometry,material,heightAt,allowed,tileSize=32,radius=4,density=.75}) {
+  const root=new THREE.Group(); root.name='Patchy meadow cover';parent.add(root);
   const capacity=Math.ceil(tileSize*tileSize*density), tiles=new Map(), pool=[];
   const count=(radius*2+1)**2, dummy=new THREE.Object3D();
   for(let i=0;i<count;i++){
@@ -29,5 +29,5 @@ export function createGroundCover(parent, {geometry,material,heightAt,allowed,ti
       mesh.count=used;mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();tiles.set(key,mesh);
     }
   }
-  return {root,update,getState:()=>({tiles:tiles.size,poolCapacity:count,tufts:[...tiles.values()].reduce((n,m)=>n+m.count,0),density}),dispose(){root.removeFromParent();root.children.forEach(mesh=>mesh.dispose());}};
+  return {root,update,getState:()=>({tiles:tiles.size,poolCapacity:count,tufts:[...tiles.values()].reduce((n,m)=>n+m.count,0),density,viewDistance:tileSize*(radius+.5)}),dispose(){root.removeFromParent();root.children.forEach(mesh=>mesh.dispose());}};
 }
