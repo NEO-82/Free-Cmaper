@@ -8,7 +8,8 @@ import { TRAVEL_CHOICES, isPrivateVehicle } from '../src/journey.js';
 test('vehicles have two-thirds of their previous speed limits and motorhome is a compact private travel option',()=>{
   assert.deepEqual(['sedan','suv','scooter','motorhome'].map(k=>VEHICLES[k].maxSpeed),[64,56,40,48].map(v=>v*2/3));
   assert.ok(TRAVEL_CHOICES.includes('motorhome'));assert.ok(isPrivateVehicle('motorhome'));
-  assert.ok(MOTORHOME_SIZE.length<9&&MOTORHOME_SIZE.width<8&&MOTORHOME_SIZE.height<5);
+  assert.deepEqual(MOTORHOME_SIZE,{width:4.18,length:8.8,height:4.51});
+  assert.equal(VEHICLES.motorhome.wheelBase,5.61);assert.equal(VEHICLES.motorhome.track,3.41);
   for(const kind of Object.keys(VEHICLES)){
     let s={kind,x:0,z:0,heading:0,speed:0};
     // Keep sampling flat, open terrain so the test measures the drivetrain.
@@ -19,7 +20,9 @@ test('vehicles have two-thirds of their previous speed limits and motorhome is a
 test('both layouts let the player reach every facility without crossing cabinets or walls',()=>{
   for(const layout of ['left','right']){
     const room=createMotorhomeInterior({layout});
-    const queue=[{x:0,z:.8}],seen=new Set(),reachable=[];
+    assert.ok(room.canStand(room.position.x,room.position.z),'actual entry spawn must be collision free');
+    const entry=room.position.clone();room.move(0,1.2);assert.ok(room.position.z>entry.z+1.19,'forward movement into the aisle is clear in both layouts');room.position.copy(entry);room.move(-.5,0);assert.ok(room.position.x<entry.x-.49,'can walk away from the door immediately');room.position.copy(entry);
+    const queue=[{x:entry.x,z:entry.z}],seen=new Set(),reachable=[];
     while(queue.length){
       const p=queue.shift(),key=`${p.x.toFixed(2)}:${p.z.toFixed(2)}`;if(seen.has(key))continue;seen.add(key);reachable.push(p);
       for(const [dx,dz]of[[.15,0],[-.15,0],[0,.15],[0,-.15]]){
@@ -59,7 +62,7 @@ test('transparent side and front windows have open sightlines to the parked vehi
   const room=createMotorhomeInterior();room.mount(world,vehicle);
   assert.equal(room.scene.parent,world);assert.equal(vehicle.visible,false);
   const localEye=new THREE.Vector3(0,1.8,.35),actual=room.toWorld(localEye);
-  const expected=vehicle.localToWorld(localEye.clone().add(new THREE.Vector3(0,.9,-.9)));
+  const expected=vehicle.localToWorld(localEye.clone().add(new THREE.Vector3(0,.9,-.9)).multiplyScalar(1.1));
   assert.ok(actual.distanceTo(expected)<1e-9);
   const windows=[];room.scene.traverse(o=>{if(o.name==='window'||o.name==='cab window')windows.push(o);});
   assert.equal(windows.length,3);

@@ -1,19 +1,11 @@
 import { campGroundHeight } from './camp-ground.js';
-import { WORLD, SHOP, SUMMIT, TRAIL_WIDTH, baseTerrainHeight, trailSurfaceAt } from './terrain.js';
-import { ARRIVAL, arrivalRoadPoint } from './journey.js';
+import { baseTerrainHeight,trailSurfaceAt,roadDistance,roadPoint,BRIDGE,SUMMITS } from './terrain.js';
 const smooth=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
-export function shopRoadPoint(t){return {x:SHOP.x+Math.sin(t*109/24)*3,z:-12+t*(WORLD.maxZ+11)};}
-export function pathDistance(x,z){
-  let d=trailSurfaceAt(x,z).distance-TRAIL_WIDTH/2;
-  const t=(x-ARRIVAL.x)/(SHOP.x-ARRIVAL.x);if(t>=0&&t<=1)d=Math.min(d,Math.abs(z-arrivalRoadPoint(t).z)-4.5);
-  const u=(z+12)/(WORLD.maxZ+11);if(u>=0&&u<=1)d=Math.min(d,Math.abs(x-shopRoadPoint(u).x)-2.1);
-  return d;
-}
-/** A shallow road bed. Feet, tyres and the drawn road share this exact height. */
-export function naturalPathSurfaceHeight(x,z){
-  const depression=.04*(1-smooth(-.5,.7,pathDistance(x,z)))*smooth(SUMMIT.radius,SUMMIT.radius+3,Math.hypot(x-SUMMIT.x,z-SUMMIT.z));
-  return baseTerrainHeight(x,z)-depression;
-}
+export function shopRoadPoint(t){return roadPoint(t,1);}
+export function pathDistance(x,z){return Math.min(trailSurfaceAt(x,z).distance-3,roadDistance(x,z)-4.5);}
+export function naturalPathSurfaceHeight(x,z){return baseTerrainHeight(x,z);}
 export function pathSurfaceHeight(x,z){return campGroundHeight(x,z,naturalPathSurfaceHeight(x,z));}
-/** Recess only the rendered underlay, so it cannot cover the road or the camper's shoes. */
-export function pathUnderlayHeight(x,z){return campGroundHeight(x,z,baseTerrainHeight(x,z)-.16*(1-smooth(0,2,pathDistance(x,z))));}
+export function pathUnderlayHeight(x,z){
+ if(x>=BRIDGE.startX&&x<=BRIDGE.endX&&Math.abs(z-BRIDGE.z)<=BRIDGE.width/2)return -5;
+ return campGroundHeight(x,z,baseTerrainHeight(x,z)-.16*(SUMMITS.some(m=>Math.hypot(x-m.x,z-m.z)<=m.radius)?1:1-smooth(0,2,pathDistance(x,z))));
+}

@@ -1,3 +1,4 @@
+import { shorelineX } from './shore-waves.js';
 import * as THREE from 'three';
 import { WORLD, terrainHeight } from './terrain.js';
 
@@ -49,7 +50,7 @@ export function createMarine(scene) {
   }
   // Tiny beach crabs inhabit the sand rather than the deep sea.
   for(let i=0;i<14;i++){
-    const g=new THREE.Group(),x=WORLD.landMaxX-24+random()*8,z=i===0?0:-200+random()*400;root.add(g);
+    const g=new THREE.Group(),z=i===0?0:-200+random()*400,x=shorelineX(z)-8-random()*8;root.add(g);
     part(g,sphere,crabBlue,0,.2,0,.42,.17,.28);
     for(const side of [-1,1])for(let n=0;n<3;n++){const spike=part(g,cone,crabBlue,side*(.38+n*.04),.2,(n-1)*.13,.09,.18,.09);spike.rotation.z=side*Math.PI/2;}
     for(const side of [-1,1]){for(let n=0;n<3;n++){const leg=part(g,cone,pink,side*.35,.14,(n-1)*.16,.045,.35,.045);leg.rotation.z=side*.9;}part(g,sphere,pink,side*.37,.35,.22,.12,.12,.12);part(g,sphere,dark,side*.12,.4,.18,.045,.065,.045);}
@@ -59,7 +60,7 @@ export function createMarine(scene) {
   const shellMaterial=mat('#dbc49c'),shellStripe=mat('#ad795a'),lobsterMaterial=mat('#af785e');
   for(let i=0;i<20;i++){
     const g=new THREE.Group();root.add(g);
-    const x=WORLD.landMaxX-18+random()*8,z=i===0?5:-220+random()*440;
+    const z=i===0?5:-220+random()*440,x=shorelineX(z)-4-random()*8;
     part(g,sphere,shellMaterial,0,.2,0,.3,.25,.25);
     const tip=part(g,cone,shellMaterial,-.22,.3,0,.19,.5,.19);tip.rotation.z=-.8;
     for(let n=0;n<4;n++)part(g,sphere,n%2?shellStripe:shellMaterial,.02-n*.07,.24+n*.04,.1,.2-n*.03,.17-n*.02,.16-n*.02);
@@ -68,7 +69,7 @@ export function createMarine(scene) {
   }
   for(let i=0;i<16;i++){
     const g=new THREE.Group();root.add(g);
-    const x=WORLD.landMaxX+4+random()*6,z=i===0?10:-220+random()*440;
+    const z=i===0?10:-220+random()*440,x=shorelineX(z)+6+random()*6;
     part(g,sphere,lobsterMaterial,0,.18,0,.20,.17,.55);
     for(let n=0;n<5;n++)part(g,sphere,lobsterMaterial,0,.17,-.30-n*.12,.22-n*.022,.13,.10);
     for(const side of [-1,1]){

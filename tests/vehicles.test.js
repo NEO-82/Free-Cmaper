@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { VEHICLES, createVehicle, stepDrive, dismountPosition } from '../src/vehicles.js';
 import { PARKING } from '../src/journey.js';
-import { WORLD, canOccupy } from '../src/terrain.js';
+import { WORLD, canOccupy, isWater } from '../src/terrain.js';
 const initial=kind=>({kind,...PARKING,heading:Math.PI/2,speed:0});
 function advance(state,input,seconds,colliders=[]){for(let i=0;i<seconds*60;i++)state=stepDrive(state,input,1/60,colliders);return state;}
 
@@ -23,7 +23,7 @@ test('high-speed cars cannot tunnel through trees/buildings, enter the sea or le
     const wall=[{kind:'box',minX:s.x+8,maxX:s.x+9,minZ:s.z-30,maxZ:s.z+30}];
     const hit=advance(s,{forward:true},3,wall);assert.ok(hit.x<=s.x+8-VEHICLES[kind].radius+.01);assert.ok(hit.blocked||hit.speed<1);
     const edge={...s,x:WORLD.minX+VEHICLES[kind].radius+.1,heading:-Math.PI/2};assert.ok(advance(edge,{forward:true},1).x>=WORLD.minX+VEHICLES[kind].radius);
-    const sea={...s,x:WORLD.landMaxX-VEHICLES[kind].radius-10,z:0};assert.ok(advance(sea,{forward:true},2).x<WORLD.landMaxX);
+    const sea={...s,x:WORLD.landMaxX-VEHICLES[kind].radius-10,z:0};const stopped=advance(sea,{forward:true},2);assert.equal(isWater(stopped.x,stopped.z),false);
   }
 });
 
@@ -47,7 +47,7 @@ test('all four independently disposable models have grounded wheels and remain f
 test('four-wheel contacts tilt the whole car with both fore/aft and side-to-side slopes at every heading',async()=>{
   const {sampleWheelGround,stepChassis}=await import('../src/vehicle-physics.js');
   const plane=(x,z)=>.12*x+.18*z;
-  for(const kind of ['sedan','suv','scooter'])for(const heading of [0,.7,1.5,2.4]){
+  for(const kind of ['sedan','suv','scooter','motorhome'])for(const heading of [0,.7,1.5,2.4]){
     const config=VEHICLES[kind],state={kind,x:20,z:-20,heading,speed:0},ground=sampleWheelGround(state,config,plane);
     const expectedPitch=-Math.atan(.12*Math.sin(heading)+.18*Math.cos(heading));
     const expectedRoll=Math.atan(.12*Math.cos(heading)-.18*Math.sin(heading));
@@ -67,4 +67,18 @@ test('spring suspension settles after a bump and gravity makes the chassis fall 
   const drop=sampleWheelGround({x:0,z:0,heading:0},config,()=>-3);
   state=stepChassis(state,drop,1/60,config);assert.equal(state.airborne,true);assert.ok(state.bodyY>0&&state.heaveVelocity<0);
   for(let i=0;i<180;i++)state=stepChassis(state,drop,1/60,config);assert.equal(state.airborne,false);assert.ok(Math.abs(state.bodyY+3)<.01);
+});
+
+
+test('higher tyre authority turns decisively at speed, caps lateral load and settles when steering is released',()=>{
+ for(const kind of Object.keys(VEHICLES)){
+  let state={kind,x:0,z:0,heading:0,speed:30};
+  for(let i=0;i<60;i++){
+   state=stepDrive({...state,x:0,z:0},{forward:true,left:true},1/60,[],{heightAt:()=>0});
+   assert.ok(Math.abs(state.yawRate*state.speed)<=12.5+1e-9);
+  }
+  assert.ok(state.heading>.25,`${kind} should respond at road speed`);
+  for(let i=0;i<20;i++)state=stepDrive({...state,x:0,z:0},{forward:true},1/60,[],{heightAt:()=>0});
+  assert.equal(state.yawRate,0,'releasing steering restores straight travel');
+ }
 });

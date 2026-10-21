@@ -1,117 +1,112 @@
 import { campGroundHeight } from './camp-ground.js';
-// Shared world coordinates and collision math. Keep independent of Three.js so
-// hiking, terrain sampling and tests all use exactly the same surface.
-const MAP_SCALE = Math.sqrt(3);
-export const WORLD = Object.freeze({ minX: -870 * MAP_SCALE, maxX: 870 * MAP_SCALE, minZ: -690 * MAP_SCALE, maxZ: 690 * MAP_SCALE, landMaxX: 285 * MAP_SCALE });
-// The unreachable ring has twice the playable area; total scenery is 3×.
-export const SCENERY = Object.freeze({ minX: WORLD.minX * Math.sqrt(3), maxX: WORLD.maxX * Math.sqrt(3), minZ: WORLD.minZ * Math.sqrt(3), maxZ: WORLD.maxZ * Math.sqrt(3) });
-export const ARRIVAL = Object.freeze({ x: WORLD.minX + 62, z: 85 });
-export const SHOP = Object.freeze({ x: -30, z: -35 });
-export const SUMMIT = Object.freeze({ x: -145, z: -195, radius: 20, height: 176 });
-export const LAKE = Object.freeze({ x: -160, z: 250, radiusX: 55, radiusZ: 42 });
-export const RIVER_START = 280;
-export const COAST_START = WORLD.landMaxX - 35;
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
-
-// Seeded once per world: irregular northern ranges and exposed, impassable rock ledges.
-let mountainSeed = 8202026;
-const mountainRandom = () => ((mountainSeed = mountainSeed*16807%2147483647)-1)/2147483646;
-export const MOUNTAIN_RIDGES = Object.freeze(Array.from({length:14},(_,i)=>Object.freeze({
-  x: WORLD.minX+100+mountainRandom()*(WORLD.landMaxX-WORLD.minX-200),
-  z: WORLD.minZ+90+mountainRandom()*420,
-  rx: 100+mountainRandom()*95, rz: 95+mountainRandom()*90, height: 80+mountainRandom()*80,
-})));
-export const ROCK_SHELVES = Object.freeze(Array.from({length:26},(_,i)=>{
-  const a = i/26*Math.PI*2 + (mountainRandom()-.5)*.25, r=60+mountainRandom()*90;
-  return Object.freeze({ x:SUMMIT.x+Math.cos(a)*r, z:SUMMIT.z+Math.sin(a)*r, rx:10+mountainRandom()*13, rz:8+mountainRandom()*15, height:14+mountainRandom()*23 });
+const MAP_SCALE=Math.sqrt(6);
+export const WORLD=Object.freeze({minX:-870*MAP_SCALE,maxX:870*MAP_SCALE,minZ:-690*MAP_SCALE,maxZ:690*MAP_SCALE,landMaxX:1670});
+// Keep the previous distant scenery bounds and panorama, independently of playable area.
+export const SCENERY=Object.freeze({minX:-2610,maxX:2610,minZ:-2070,maxZ:2070});
+export const ISLAND=Object.freeze({x:220,z:-50,rx:1450,rz:1470});
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);};
+function shoreRadius(a){return 1+.014*Math.sin(a*5)+.009*Math.sin(a*9+.5);}
+export function islandDistance(x,z){const dx=(x-ISLAND.x)/ISLAND.rx,dz=(z-ISLAND.z)/ISLAND.rz,a=Math.atan2(dz,dx);return (shoreRadius(a)-Math.hypot(dx,dz))*Math.min(ISLAND.rx,ISLAND.rz);}
+export function islandCoastPoint(a){const r=shoreRadius(a);return {x:ISLAND.x+Math.cos(a)*ISLAND.rx*r,z:ISLAND.z+Math.sin(a)*ISLAND.rz*r};}
+const bridgeZ=1120;
+let westLo=WORLD.minX,westHi=ISLAND.x;
+for(let i=0;i<50;i++){const mid=(westLo+westHi)/2;if(islandDistance(mid,bridgeZ)>0)westHi=mid;else westLo=mid;}
+const bridgeEnd=(westLo+westHi)/2;
+export const BRIDGE=Object.freeze({startX:bridgeEnd-500,endX:bridgeEnd,z:bridgeZ,length:500,width:18,height:4.5});
+const mainlandWidth=BRIDGE.startX-WORLD.minX,worldArea=(WORLD.maxX-WORLD.minX)*(WORLD.maxZ-WORLD.minZ);
+export const MAINLAND=Object.freeze({minX:WORLD.minX,maxX:BRIDGE.startX,minZ:WORLD.maxZ-worldArea*.05/mainlandWidth,maxZ:WORLD.maxZ});
+export const ARRIVAL=Object.freeze({x:BRIDGE.startX-140,z:bridgeZ});
+export const MOUNTAINS=Object.freeze([
+ {id:'cedar',x:-320,z:-200,height:310,radius:32,rx:285,rz:290,drivable:true},
+ {id:'sunrise',x:650,z:150,height:245,radius:30,rx:255,rz:260,drivable:true},
+ {id:'cloud',x:280,z:-860,height:410,radius:18,rx:310,rz:290,drivable:false},
+ {id:'fern',x:-420,z:500,height:205,radius:18,rx:245,rz:230,drivable:false},
+ {id:'stone',x:1030,z:-520,height:350,radius:18,rx:265,rz:280,drivable:false},
+].map(Object.freeze));
+export const SUMMITS=Object.freeze(MOUNTAINS.filter(m=>m.drivable));
+export const SUMMIT=SUMMITS[0];
+export const MOUNTAIN_RIDGES=MOUNTAINS,ROCK_SHELVES=Object.freeze([]);
+export const TRAIL_WIDTH=6,TRAIL_SAMPLES=1200;
+export function trailPoint(t,index=0){
+ const m=SUMMITS[index]??SUMMIT; t=clamp(t,0,1);const u=Math.min(1,t/.97),a=.70+Math.PI*5*u;
+ const r=t<=.97?m.rx*1.18+(24-m.rx*1.18)*u:24*(1-(t-.97)/.03);
+ return {x:m.x+Math.sin(a)*r,z:m.z+Math.cos(a)*r};
+}
+const buckets=new Map();
+export const TRAILS=Object.freeze(SUMMITS.map((mountain,index)=>{
+ const track=Array.from({length:TRAIL_SAMPLES+1},(_,i)=>trailPoint(i/TRAIL_SAMPLES,index));let length=0;
+ track.forEach((p,i)=>{if(i)length+=Math.hypot(p.x-track[i-1].x,p.z-track[i-1].z);p.distance=length;});
+ for(let i=1;i<track.length;i++){const a=track[i-1],b=track[i],segment={a,b,mountain};
+  for(let gx=Math.floor((Math.min(a.x,b.x)-14)/16);gx<=Math.floor((Math.max(a.x,b.x)+14)/16);gx++)for(let gz=Math.floor((Math.min(a.z,b.z)-14)/16);gz<=Math.floor((Math.max(a.z,b.z)+14)/16);gz++){
+   const key=`${gx}:${gz}`;if(!buckets.has(key))buckets.set(key,[]);buckets.get(key).push(segment);
+  }
+ }
+ return {mountain,index,track,length};
 }));
-
-export function riverX(z) { return LAKE.x + Math.sin((z - RIVER_START) * 0.03) * 19; }
-export function isWater(x, z) {
-  if (x >= WORLD.landMaxX) return true;
-  const lake = ((x - LAKE.x) / LAKE.radiusX) ** 2 + ((z - LAKE.z) / LAKE.radiusZ) ** 2;
-  return lake < 1 || (z >= RIVER_START && Math.abs(x - riverX(z)) < 5.5);
+export function trailSurfaceAt(x,z){
+ let nearest=Infinity,distance=0,mountain=SUMMIT;
+ for(const {a,b,mountain:m} of buckets.get(`${Math.floor(x/16)}:${Math.floor(z/16)}`)??[]){const dx=b.x-a.x,dz=b.z-a.z,f=clamp(((x-a.x)*dx+(z-a.z)*dz)/(dx*dx+dz*dz||1),0,1),d=(x-a.x-f*dx)**2+(z-a.z-f*dz)**2;
+  if(d<nearest){nearest=d;distance=a.distance+(b.distance-a.distance)*f;mountain=m;}
+ }
+ const length=TRAILS.find(t=>t.mountain===mountain).length;
+ return {distance:Math.sqrt(nearest),height:2.5+(mountain.height-2.5)*smooth(0,1,distance/(length-32)),mountain};
 }
-export function baseTerrainHeight(x, z) {
-  if (!Number.isFinite(x) || !Number.isFinite(z)) return 0;
-  const r = Math.hypot(x - SUMMIT.x, z - SUMMIT.z);
-  if (r <= SUMMIT.radius) return SUMMIT.height;
-  let h = 2.5 + Math.sin(x * 0.026) * Math.cos(z * 0.021) * 2.2 + Math.sin(x * 0.012 + z * 0.041) * 1.15;
-  const mountain = 173.5 * (1 - smooth(20, 185, r));
-  const westRidge = 64 * Math.exp(-(((x + 290) / 59) ** 2 + ((z + 234) / 66) ** 2));
-  const northRidge = 44 * Math.exp(-(((x - 8) / 64) ** 2 + ((z + 250) / 42) ** 2));
-  const roughness = Math.sin(x * 0.1 + z * 0.032) * Math.sin(z * 0.08) * 2.1 * smooth(23, 70, r);
-  const frontierRidge = 86 * Math.exp(-(((x + 405) / 88) ** 2 + ((z + 140) / 130) ** 2)) + 64 * Math.exp(-(((x + 255) / 108) ** 2 + ((z + 365) / 58) ** 2));
-  h += mountain + westRidge + northRidge + frontierRidge + roughness * 3 * Math.min(1, mountain / 30);
-  for (const ridge of MOUNTAIN_RIDGES) {
-    const d = Math.hypot((x-ridge.x)/ridge.rx, (z-ridge.z)/ridge.rz);
-    if (d < 1.8) h += ridge.height * (1-smooth(.12,1.55,d)) + Math.sin(x*.06+z*.035)*6*(1-smooth(.4,1.5,d));
-  }
-  // Broken rocky shelves create real steep faces, with rounded, climbable approaches.
-  for (const shelf of ROCK_SHELVES) {
-    const d = Math.hypot((x-shelf.x)/shelf.rx, (z-shelf.z)/shelf.rz);
-    if (d < 1.15) h += shelf.height * (1-smooth(.68,1.02,d));
-  }
-  const path = trailSurfaceAt(x,z);
-  if (path.distance < 18) h = h * smooth(6.5,18,path.distance) + path.height * (1-smooth(6.5,18,path.distance));
-  // Blend into an exactly level 40 m wide summit, with no ledge to climb over.
-  h = SUMMIT.height * (1 - smooth(20, 29, r)) + h * smooth(20, 29, r);
-  const outsideShop = Math.hypot(Math.max(-46 - x, 0, x + 14), Math.max(-50 - z, 0, z + 18));
-  const shopBlend = 1 - smooth(0, 12, outsideShop);
-  h = h * (1 - shopBlend) + 2.5 * shopBlend;
-  const outsideArrival = Math.hypot(Math.max(Math.abs(x-ARRIVAL.x)-54,0),Math.max(Math.abs(z-ARRIVAL.z)-65,0));
-  const arrivalBlend = 1-smooth(0,12,outsideArrival);
-  h = h*(1-arrivalBlend)+2.5*arrivalBlend;
-  const coast = smooth(COAST_START, WORLD.landMaxX + 8, x);
-  h = h * (1 - coast) - coast * 2.8;
-  if (x >= WORLD.landMaxX) h = -3.5 - Math.min(5, (x - WORLD.landMaxX) * 0.025);
-  const lakeDistance=Math.hypot((x-LAKE.x)/LAKE.radiusX,(z-LAKE.z)/LAKE.radiusZ);
-  if(lakeDistance<1)h=-3+2.9*smooth(.89,1,lakeDistance);
-  else if(lakeDistance<1.08)h=-.1+(h+.1)*smooth(1,1.08,lakeDistance);
-  if(z>=RIVER_START){const bank=Math.abs(x-riverX(z));if(bank<5.5)h=-2.4+2.3*smooth(3.5,5.5,bank);else if(bank<10)h=-.1+(h+.1)*smooth(5.5,10,bank);}
-  return h;
+const starts=SUMMITS.map((m,i)=>trailPoint(0,i));
+export const SHOP_SITES=Object.freeze([
+ {id:'parking',x:ARRIVAL.x-15,z:ARRIVAL.z-45},
+ {id:'island-entry',x:BRIDGE.endX+100,z:BRIDGE.z-36},
+ ...starts.map((p,i)=>({id:SUMMITS[i].id+'-gate',x:p.x-55,z:p.z+45})),
+].map(Object.freeze));
+export const SHOP=SHOP_SITES[0];
+export const ROAD_NETWORK=Object.freeze([
+ [ARRIVAL,{x:BRIDGE.startX,z:BRIDGE.z},{x:BRIDGE.endX,z:BRIDGE.z},{x:BRIDGE.endX+160,z:BRIDGE.z},{x:40,z:800},starts[0]],
+ [{x:40,z:800},{x:1080,z:670},starts[1]],
+ ...starts.map((p,i)=>[p,{x:SHOP_SITES[i+2].x,z:SHOP_SITES[i+2].z+14}]),
+]);
+export function roadPoint(t,branch=0){const points=ROAD_NETWORK[branch],lengths=points.slice(1).map((p,i)=>Math.hypot(p.x-points[i].x,p.z-points[i].z)),length=lengths.reduce((a,b)=>a+b,0);let d=clamp(t,0,1)*length;
+ for(let i=0;i<lengths.length;i++){if(d<=lengths[i]||i===lengths.length-1){const f=d/lengths[i],a=points[i],b=points[i+1];return {x:a.x+(b.x-a.x)*f,z:a.z+(b.z-a.z)*f};}d-=lengths[i];}
 }
-/** Current ground includes the level pad under the active tent only. */
+export function roadDistance(x,z){let nearest=Infinity;for(const points of ROAD_NETWORK)for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],dx=b.x-a.x,dz=b.z-a.z,f=clamp(((x-a.x)*dx+(z-a.z)*dz)/(dx*dx+dz*dz),0,1);nearest=Math.min(nearest,Math.hypot(x-a.x-f*dx,z-a.z-f*dz));}return nearest;}
+export const LAKE=Object.freeze({x:-800,z:250,radiusX:55,radiusZ:42});
+export const RIVER_START=280,COAST_START=WORLD.landMaxX-35;
+export function riverX(z){return LAKE.x+Math.sin((z-RIVER_START)*.03)*19;}
+export function mainlandDistance(x,z){return Math.min(x-MAINLAND.minX,MAINLAND.maxX-x,z-MAINLAND.minZ,MAINLAND.maxZ-z);}
+export function coastDistance(x,z){return Math.max(islandDistance(x,z),mainlandDistance(x,z));}
+export function bridgeSurfaceAt(x,z){if(Math.abs(z-BRIDGE.z)>BRIDGE.width/2||x<BRIDGE.startX-60||x>BRIDGE.endX+60)return null;const ramp=Math.min(smooth(BRIDGE.startX-60,BRIDGE.startX,x),1-smooth(BRIDGE.endX,BRIDGE.endX+60,x));return 2.5+2*ramp;}
+export function isWater(x,z){
+ if(bridgeSurfaceAt(x,z)!==null)return false;
+ if(coastDistance(x,z)<=0)return true;
+ const lake=((x-LAKE.x)/LAKE.radiusX)**2+((z-LAKE.z)/LAKE.radiusZ)**2;
+ return lake<1||(z>=RIVER_START&&Math.abs(x-riverX(z))<5.5);
+}
+export function baseTerrainHeight(x,z){
+ if(!Number.isFinite(x)||!Number.isFinite(z))return 0;
+ const bridge=bridgeSurfaceAt(x,z);if(bridge!==null)return bridge;
+ const coast=coastDistance(x,z);
+ if(coast<=0)return -.15-Math.min(8,-coast*.06);
+ let h=Math.max(.65,2.5+Math.sin(x*.026)*Math.cos(z*.021)*2.2+Math.sin(x*.012+z*.041)*1.15);
+ if(islandDistance(x,z)>0){
+  for(const m of MOUNTAINS){const d=Math.hypot((x-m.x)/m.rx,(z-m.z)/m.rz),top=m.radius/Math.min(m.rx,m.rz);h=Math.max(h,2.5+(m.height-2.5)*(1-smooth(top,1.15,d)));}
+  const path=trailSurfaceAt(x,z);if(path.distance<14){const blend=1-smooth(5,14,path.distance);h=h*(1-blend)+path.height*blend;}
+  for(const m of MOUNTAINS){const d=Math.hypot(x-m.x,z-m.z),blend=1-smooth(m.radius,m.radius+8,d);h=h*(1-blend)+m.height*blend;}
+ }
+ const road=1-smooth(7,15,roadDistance(x,z));h=h*(1-road)+2.5*road;
+ if(Math.abs(x-ARRIVAL.x)<85&&Math.abs(z-ARRIVAL.z)<90)h=2.5;
+ for(const shop of SHOP_SITES){const outside=Math.hypot(Math.max(Math.abs(x-shop.x)-17,0),Math.max(Math.abs(z-shop.z)-17,0)),blend=1-smooth(0,10,outside);h=h*(1-blend)+2.5*blend;}
+ h=h*smooth(0,35,coast)-.15*(1-smooth(0,35,coast));
+ const lake=Math.hypot((x-LAKE.x)/LAKE.radiusX,(z-LAKE.z)/LAKE.radiusZ);
+ if(lake<1)h=-3+2.9*smooth(.89,1,lake);else if(lake<1.08)h=-.1+(h+.1)*smooth(1,1.08,lake);
+ if(z>=RIVER_START&&islandDistance(x,z)>0){const bank=Math.abs(x-riverX(z));if(bank<5.5)h=-2.4+2.3*smooth(3.5,5.5,bank);else if(bank<14)h=-.1+(h+.1)*smooth(5.5,14,bank);}
+ return h;
+}
 export function terrainHeight(x,z){return campGroundHeight(x,z,baseTerrainHeight(x,z));}
-// A long curling approach trades the old steep climb for gentle, broad switchbacks.
-const trailStart={x:-40,z:-56},trailRadius=Math.hypot(trailStart.x-SUMMIT.x,trailStart.z-SUMMIT.z);
-const trailAngle=Math.atan2(trailStart.x-SUMMIT.x,trailStart.z-SUMMIT.z);
-export const TRAIL_WIDTH=10;
-export const TRAIL_SAMPLES=840;
-export function trailPoint(t) {
-  t=clamp(t,0,1);
-  const u=Math.min(1,t/.96),angle=trailAngle+Math.PI*3.5*u;
-  const radius=t<=.96?trailRadius+(18-trailRadius)*u:18*(1-(t-.96)/.04);
-  return {x:SUMMIT.x+Math.sin(angle)*radius,z:SUMMIT.z+Math.cos(angle)*radius};
-}
-// Index the switchback trail so height queries do not scan its entire length.
-const trailBuckets = new Map(), track = Array.from({length:TRAIL_SAMPLES+1},(_,i)=>trailPoint(i/TRAIL_SAMPLES));
-let trackLength=0;
-for(let i=0;i<track.length;i++){ if(i)trackLength+=Math.hypot(track[i].x-track[i-1].x,track[i].z-track[i-1].z);track[i].distance=trackLength; }
-for(let i=1;i<track.length;i++) {
-  const a=track[i-1], b=track[i], segment={a,b};
-  for(let gx=Math.floor((Math.min(a.x,b.x)-19)/16);gx<=Math.floor((Math.max(a.x,b.x)+19)/16);gx++)
-    for(let gz=Math.floor((Math.min(a.z,b.z)-19)/16);gz<=Math.floor((Math.max(a.z,b.z)+19)/16);gz++){
-      const key=`${gx}:${gz}`;if(!trailBuckets.has(key))trailBuckets.set(key,[]);trailBuckets.get(key).push(segment);
-    }
-}
-export function trailSurfaceAt(x,z) {
-  let nearest=Infinity, distance=0;
-  const segments=trailBuckets.get(`${Math.floor(x/16)}:${Math.floor(z/16)}`)??[];
-  for(const {a,b} of segments){
-    const dx=b.x-a.x,dz=b.z-a.z, f=clamp(((x-a.x)*dx+(z-a.z)*dz)/(dx*dx+dz*dz||1),0,1);
-    const d=(x-a.x-f*dx)**2+(z-a.z-f*dz)**2;
-    if(d<nearest){nearest=d;distance=a.distance+(b.distance-a.distance)*f;}
-  }
-  return {distance:Math.sqrt(nearest),height:2.5+(SUMMIT.height-2.5)*smooth(0,1,distance/(trackLength-25))};
-}
 export function terrainSlope(x,z) {
   const dx=(terrainHeight(x+.5,z)-terrainHeight(x-.5,z)), dz=(terrainHeight(x,z+.5)-terrainHeight(x,z-.5));
   return Math.hypot(dx,dz);
 }
 export function terrainWalkable(x,z) {
-  return isWater(x,z) || x>COAST_START || [[1.2,0],[-1.2,0],[0,1.2],[0,-1.2]].some(([dx,dz])=>isWater(x+dx,z+dz)) || terrainSlope(x,z)<=1.25;
+  return isWater(x,z) || coastDistance(x,z)<35 || [[1.2,0],[-1.2,0],[0,1.2],[0,-1.2]].some(([dx,dz])=>isWater(x+dx,z+dz)) || terrainSlope(x,z)<=1.25;
 }
 
 export function circleOverlaps(x, z, radius, collider) {
@@ -128,7 +123,7 @@ export function canOccupy(x, z, colliders = [], radius = 0.55, { allowWater = fa
   if (x < WORLD.minX + radius || x > WORLD.maxX - radius || z < WORLD.minZ + radius || z > WORLD.maxZ - radius) return false;
   if (!ignoreSlope && !terrainWalkable(x,z)) return false;
   if (!allowWater) {
-    if (isWater(x, z) || (x > COAST_START && terrainHeight(x, z) < .15)) return false;
+    if (isWater(x, z) || (coastDistance(x,z)<35 && terrainHeight(x,z)<.15)) return false;
     for (let i = 0; i < 8; i++) if (isWater(x + Math.cos(i * Math.PI / 4) * radius, z + Math.sin(i * Math.PI / 4) * radius)) return false;
   }
   return !colliders.some(c => circleOverlaps(x, z, radius, c));
@@ -139,7 +134,7 @@ export function resolveMovement(position, delta, colliders = [], radius = 0.55, 
   const steps = Math.max(1, Math.ceil(Math.hypot(delta.x, delta.z) / Math.max(0.15, radius * 0.65)));
   const dx = delta.x / steps, dz = delta.z / steps;
   const allowed = (nx,nz) => canOccupy(nx,nz,colliders,radius,options) &&
-    (options.ignoreSlope || (options.allowWater && (isWater(nx,nz)||isWater(x,z)||nx>COAST_START||x>COAST_START)) || Math.abs(terrainHeight(nx,nz)-terrainHeight(x,z)) <= Math.hypot(nx-x,nz-z)*1.35+.035);
+    (options.ignoreSlope || (options.allowWater && (isWater(nx,nz)||isWater(x,z)||coastDistance(nx,nz)<35||coastDistance(x,z)<35)) || Math.abs(terrainHeight(nx,nz)-terrainHeight(x,z)) <= Math.hypot(nx-x,nz-z)*1.35+.035);
   for (let i = 0; i < steps; i++) {
     if (allowed(x + dx, z + dz)) { x += dx; z += dz; }
     else {

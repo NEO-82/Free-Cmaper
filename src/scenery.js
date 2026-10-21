@@ -36,7 +36,7 @@ export function createScenery(scene) {
     const m=new THREE.Mesh(new THREE.PlaneGeometry(r*.84,680),mountainMaterial);
     m.position.set(Math.sin(a)*r,220,Math.cos(a)*r);m.rotation.y=a;group.add(m);
   }
-  const water=new THREE.Mesh(new THREE.PlaneGeometry(SCENERY.maxX-WORLD.landMaxX,SCENERY.maxZ-SCENERY.minZ),new THREE.MeshStandardMaterial({color:'#6bcac9',roughness:.45,transparent:true,opacity:.65}));
-  water.rotation.x=-Math.PI/2;water.position.set((SCENERY.maxX+WORLD.landMaxX)/2,-.12,0);group.add(water);
+  const water=new THREE.Mesh(new THREE.PlaneGeometry(SCENERY.maxX-SCENERY.minX,SCENERY.maxZ-SCENERY.minZ),new THREE.MeshStandardMaterial({color:'#6bcac9',roughness:.45,transparent:true,opacity:.65}));
+  water.rotation.x=-Math.PI/2;water.position.set(0,-.12,0);group.add(water);
   return {group,bounds:SCENERY};
 }

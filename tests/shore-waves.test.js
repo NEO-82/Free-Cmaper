@@ -5,7 +5,7 @@ import {shorelineX,shoreWaveHeight,foamFront,createShoreWaves}from '../src/shore
 import {WORLD,terrainHeight}from '../src/terrain.js';
 
 test('small shore waves follow the actual coastline and stay below sixteen centimetres',()=>{
- for(const z of [WORLD.minZ+1,-600,0,450,WORLD.maxZ-1]){
+ for(const z of [-1000,-600,0,450,1000]){
   const x=shorelineX(z);assert.ok(Math.abs(terrainHeight(x,z))<.001);
   for(let t=0;t<20;t+=.5)for(const d of [0,2,10,35,70]){const y=shoreWaveHeight(d,z,t);assert.ok(y>=.02&&y<=.16);}
   assert.equal(shoreWaveHeight(70,z,0),shoreWaveHeight(70,z,5));

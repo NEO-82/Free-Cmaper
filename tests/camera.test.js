@@ -28,6 +28,6 @@ test('wheel zoom reaches first person, restores third person and respects distan
   const near=zoomDistance(9.5,-1000);assert.equal(near,0);assert.ok(isFirstPerson(near));
   const away=zoomDistance(near,200);assert.equal(away,5);assert.equal(isFirstPerson(away),false);
   assert.equal(zoomDistance(40,2000),45);assert.equal(zoomDistance(9.5,-24,1),0);
-  for(const kind of ['sedan','suv','scooter','motorhome']){const eye=driverEye(kind);assert.ok(eye.y>2&&eye.y<3.1);assert.ok(Object.values(eye).every(Number.isFinite));}
+  for(const kind of ['sedan','suv','scooter','motorhome']){const eye=driverEye(kind);assert.ok(eye.y>2&&eye.y<3.3);assert.ok(Object.values(eye).every(Number.isFinite));}
   assert.ok(driverEye('motorhome').z>driverEye('sedan').z);
 });

@@ -7,7 +7,7 @@ import { pathSurfaceHeight, pathUnderlayHeight, shopRoadPoint } from './paths.js
 import { arrivalReserved, nearArrivalRoad, arrivalRoadPoint } from './journey.js';
 import { createGroundCover } from './groundcover.js';
 import * as geography from './terrain.js';
-const { WORLD, SHOP, SUMMIT, LAKE, terrainHeight, isWater, riverX, trailPoint, trailSurfaceAt, terrainSlope } = geography;
+const { WORLD, SHOP, SUMMIT, LAKE, terrainHeight, isWater, riverX, trailPoint, trailSurfaceAt, terrainSlope, coastDistance, SHOP_SITES, SUMMITS, TRAILS, ROAD_NETWORK, roadPoint } = geography;
 
 function generator(seed = 82021) { return () => { seed = seed * 16807 % 2147483647; return (seed - 1) / 2147483646; }; }
 function paintedTexture(kind, random) {
@@ -101,8 +101,8 @@ export function createWorld(scene) {
   groundMap.repeat.set(width / 12, depth / 12); barkMap.repeat.set(1, 2);
   const groundMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, map: groundMap });
   // Concentrate samples on the detailed central mountain; distant land uses a coarse grid.
-  function axis(min,max,fineMin,fineMax){ const values=[min];let x=min;while(x<max){x=Math.min(max,x+(x>=fineMin&&x<fineMax?2.5:12));values.push(x);}return values; }
-  const xs=axis(WORLD.minX,WORLD.maxX,-480,110), zs=axis(WORLD.minZ,WORLD.maxZ,-480,50);
+  function axis(min,max,fineMin,fineMax){ const values=[min];let x=min;while(x<max){x=Math.min(max,x+(x>=fineMin&&x<fineMax?4:16));values.push(x);}return values; }
+  const xs=axis(WORLD.minX,WORLD.maxX,-720,1370), zs=axis(WORLD.minZ,WORLD.maxZ,-1230,860);
   const terrain = new THREE.PlaneGeometry(width,depth,xs.length-1,zs.length-1);terrain.rotateX(-Math.PI/2);
   const vertices=terrain.attributes.position,uvs=terrain.attributes.uv,colors=new Float32Array(vertices.count*3);
   for(let i=0;i<vertices.count;i++){
@@ -123,33 +123,33 @@ export function createWorld(scene) {
     shader.fragmentShader = `uniform float uLandscapeTime; varying vec3 vPaintedWater;\n${shader.fragmentShader}`.replace('#include <color_fragment>', '#include <color_fragment>\nfloat ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uLandscapeTime * .8) * sin(vPaintedWater.z * .57 - uLandscapeTime * .46); float line = smoothstep(.86, .99, ripple); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.6,.94,.9), line * .24);');
   };
   waterMaterial.customProgramCacheKey = () => 'painted-water-v1';
-  const seaStart = coastStart + 8, seaWidth = WORLD.maxX - seaStart;
+  const seaStart=WORLD.minX,seaWidth=width;
   const sea = mesh(group, new THREE.PlaneGeometry(seaWidth, depth, 28, 60), waterMaterial, seaStart + seaWidth / 2, 0, (WORLD.minZ + WORLD.maxZ) / 2); sea.rotation.x = -Math.PI / 2; sea.castShadow = false;
   const lake = mesh(group, new THREE.CircleGeometry(1, 80), waterMaterial, LAKE.x, .1, LAKE.z); lake.rotation.x = -Math.PI / 2; lake.scale.set(LAKE.radiusX, LAKE.radiusZ, 1); lake.castShadow = false;
   const river = ribbon(Array.from({ length: 85 }, (_, i) => { const z = riverStart + i / 84 * (WORLD.maxZ - riverStart); return { x: riverX(z), y: .12, z }; }), 11, waterMaterial, group);
   const shoreWaves=createShoreWaves(group);
-  const trailSamples = Array.from({ length: geography.TRAIL_SAMPLES+1 }, (_, i) => trailPoint(i / geography.TRAIL_SAMPLES));
-  const trailMap = paintedTexture('trail', random);
-  const trailMaterial = new THREE.MeshStandardMaterial({ color: '#e1c19a', map: trailMap, roughness: 1, side: THREE.DoubleSide });
-  ribbon(trailSamples, geography.TRAIL_WIDTH, trailMaterial, group);
-  const shopTrail = Array.from({length:Math.ceil((WORLD.maxZ+11)/1.5)+1},(_,i)=>shopRoadPoint(i/Math.ceil((WORLD.maxZ+11)/1.5)));
-  ribbon(shopTrail, 4.2, trailMaterial, group);
-  ribbon(Array.from({length:1001},(_,i)=>arrivalRoadPoint(i/1000)),9,trailMaterial,group);
-  function nearTrail(x, z) { return trailSurfaceAt(x,z).distance < geography.TRAIL_WIDTH/2+3.5; }
+  const campsiteMaterial=new THREE.MeshStandardMaterial({color:'#a3c99b',roughness:1});
+  for(const m of SUMMITS){const pad=mesh(group,new THREE.CircleGeometry(m.radius,96),campsiteMaterial,m.x,m.height,m.z);pad.rotation.x=-Math.PI/2;pad.name='summit-campsite';pad.castShadow=false;}
+  const trailSamples=TRAILS.flatMap(route=>route.track);
+  const trailMap=paintedTexture('trail',random);
+  const trailMaterial=new THREE.MeshStandardMaterial({color:'#e1c19a',map:trailMap,roughness:1,side:THREE.DoubleSide});
+  for(const route of TRAILS)ribbon(route.track,geography.TRAIL_WIDTH,trailMaterial,group);
+  for(let branch=0;branch<ROAD_NETWORK.length;branch++){const route=ROAD_NETWORK[branch],length=route.slice(1).reduce((sum,p,i)=>sum+Math.hypot(p.x-route[i].x,p.z-route[i].z),0),count=Math.ceil(length/1.2);ribbon(Array.from({length:count+1},(_,i)=>roadPoint(i/count,branch)),9,trailMaterial,group);}
+  function nearTrail(x, z) { return trailSurfaceAt(x,z).distance < geography.TRAIL_WIDTH/2+8; }
   const cliffSites = [{ x: -58, z: -37, r: 6.2 }, { x: -72, z: -45, r: 8.2 }, { x: -64, z: -59, r: 5.4 }];
   function reserved(x, z) {
-    return arrivalReserved(x,z) || nearArrivalRoad(x,z,8) || isWater(x, z) || cliffSites.some(p => Math.hypot(x - p.x, z - p.z) < p.r + 3) || x > coastStart - 4 || (x > SHOP.x - 19 && x < SHOP.x + 19 && z > SHOP.z - 19 && z < SHOP.z + 17) || Math.hypot(x - SUMMIT.x, z - SUMMIT.z) < SUMMIT.radius + 5 || nearTrail(x, z) || Math.hypot(x - SHOP.x, z + 12) < 8;
+    return arrivalReserved(x,z)||nearArrivalRoad(x,z,12)||isWater(x,z)||coastDistance(x,z)<40||cliffSites.some(p=>Math.hypot(x-p.x,z-p.z)<p.r+3)||SHOP_SITES.some(p=>Math.abs(x-p.x)<23&&Math.abs(z-p.z)<24)||SUMMITS.some(m=>Math.hypot(x-m.x,z-m.z)<m.radius+7)||nearTrail(x,z);
   }
   const trunkGeo = coloredGeometry(new THREE.CylinderGeometry(.62, 1, 1, 10, 3), '#ab8140', '#ffdc90');
   const branchGeo = new THREE.CylinderGeometry(.13, .25, 1, 6);
   const leafGeo = canopyGeometry(), pineGeo = canopyGeometry(true);
   const TREE_COUNT = 3600, LEAF_LAYERS = 6, BRANCHES = 5, CLIMB_STEPS = 9;
   const climbGeo=new THREE.CylinderGeometry(1,1,1,12);
-  const specifications = [{ x: -23, z: -8, radius: .72, h: 10.5, species: 1 }];
+  const specifications = [];
   // A readable, lush foreground around the trailhead, and equally dense new land.
   let attempts = 0;
   while (specifications.length < TREE_COUNT && attempts++ < 40000) {
-    const local = specifications.length < 120, mountain = !local && specifications.length < 350;
+    const local=false,mountain=specifications.length<350;
     const x = local ? SHOP.x - 85 + random() * 170 : mountain ? SUMMIT.x-175+random()*350 : WORLD.minX + 15 + random() * (landWidth - 30);
     const z = local ? SHOP.z - 90 + random() * 180 : mountain ? SUMMIT.z-175+random()*350 : WORLD.minZ + 14 + random() * (depth - 28);
     if (reserved(x, z) || terrainSlope(x,z)>1.1 || specifications.some(t => Math.hypot(t.x - x, t.z - z) < 5.6)) continue;
@@ -229,7 +229,7 @@ export function createWorld(scene) {
     falling.push({ object: fallingTree, time: 0, direction: tree.index % 2 ? 1 : -1 });
     return { felled: true, wood: 3, hits: tree.hits };
   }
-  const rockPositions = [{ x: -39, z: -10, r: 1.2 }, ...cliffSites];
+  const rockPositions = cliffSites.filter(p=>!reserved(p.x,p.z));
   let rockAttempts = 0;
   while (rockPositions.length < 220 && rockAttempts++ < 10000) { const mountain=rockPositions.length<100;const x = mountain ? SUMMIT.x-180+random()*360 : WORLD.minX + 20 + random() * (landWidth - 45), z = mountain ? SUMMIT.z-180+random()*360 : WORLD.minZ + 20 + random() * (depth - 40); if (!reserved(x, z) && !trees.some(t => Math.hypot(t.x - x, t.z - z) < 4)) rockPositions.push({ x, z, r: 1.4 + random() * 3.3 }); }
   const rockGeo = boulderGeometry(), mossGeo = coloredGeometry(new THREE.IcosahedronGeometry(.85, 1), '#55a72d', '#c7e960');
@@ -247,7 +247,7 @@ export function createWorld(scene) {
     if(arrivalReserved(x,z)||nearArrivalRoad(x,z,5))return false;
     if(x<WORLD.minX||x>coastStart-2||z<WORLD.minZ||z>WORLD.maxZ||isWater(x,z)||nearTrail(x,z))return false;
     if(x>SHOP.x-11&&x<SHOP.x+11&&z>SHOP.z-10&&z<SHOP.z+14)return false;
-    if(z>-12&&Math.abs(x-SHOP.x)<5)return false;
+    if(arrivalReserved(x,z)||nearArrivalRoad(x,z,5.5)||SHOP_SITES.some(p=>Math.abs(x-p.x)<14&&Math.abs(z-p.z)<15)||SUMMITS.some(p=>Math.hypot(x-p.x,z-p.z)<p.radius))return false;
     return terrainSlope(x,z)<1.1;
   }});
   groundCover.update(SHOP);
@@ -286,19 +286,20 @@ export function createWorld(scene) {
     mesh(object, new THREE.PlaneGeometry(2.35, .76), new THREE.MeshBasicMaterial({ map, side: THREE.DoubleSide }), 0, 2.4, .08);
     colliders.push({ id, kind: 'circle', x, z, radius: .18, active: true }); interactables.push({ id, type: 'sign', x, z, y, radius: .3, object, text });
   }
-  sign(-36, -57, 'SUMMIT TRAIL ↑', 'trail-sign'); sign(SUMMIT.x - 13, SUMMIT.z + 13, `SUMMIT · ${SUMMIT.height} m`, 'summit-sign');
-  const summitStones = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.22, 1), rockMaterial, 34);
-  for (let i = 0; i < 34; i++) { const angle = i / 34 * Math.PI * 2; dummy.position.set(SUMMIT.x + Math.cos(angle) * (SUMMIT.radius - 2), SUMMIT.height + .12, SUMMIT.z + Math.sin(angle) * (SUMMIT.radius - 2)); dummy.rotation.set(0, i, 0); dummy.scale.set(1.4, .8, 1); dummy.updateMatrix(); summitStones.setMatrixAt(i, dummy.matrix); }
-  summitStones.instanceMatrix.needsUpdate = true; group.add(summitStones);
-  interactables.push({ id: 'summit-meadow', type: 'landmark', x: SUMMIT.x, z: SUMMIT.z, y: SUMMIT.height, radius: SUMMIT.radius, text: 'summit' });
+  for(const route of TRAILS){
+    const m=route.mountain,start=route.track[0];
+    sign(start.x+9,start.z,'SUMMIT ROAD ↑',m.id+'-road-sign');
+    sign(m.x-20,m.z+18,`CAMP · ${m.height} m`,m.id+'-summit-sign');
+    interactables.push({id:m.id+'-camp',type:'landmark',x:m.x,z:m.z,y:m.height,radius:m.radius,text:'summit'});
+  }
   interactables.push({ id: 'lake-shore', type: 'water', x: LAKE.x, z: LAKE.z - LAKE.radiusZ - 1, y: 0, radius: 2, text: 'lake' });
   const baseColor = new THREE.Color(), green = new THREE.Color(), cliff = new THREE.Color();
   function updateSeason(index) {
-    campGroundView?.setSeason(index);
+    campGroundView?.setSeason(index);campsiteMaterial.color.set(['#a3c99b','#86bd93','#ccb689','#cfdfd2'][index]);
     const normals = terrain.attributes.normal;
     for (let i = 0; i < vertices.count; i++) {
       const x = vertices.getX(i), y = vertices.getY(i), z = vertices.getZ(i), patch = Math.sin(x * .037 + Math.cos(z * .05)) * Math.sin(z * .031) * .035;
-      const coast = x > coastStart - 10;
+      const coast = coastDistance(x,z)<45;
       green.set(index === 3 ? y > 10 ? '#e9f2ec' : '#cfdfd2' : ['#a3c99b', '#86bd93', '#ccb689', '#dce9e1'][index]);
       cliff.set(index === 3 ? '#c0c6bc' : '#daa676');
       const slope = 1 - Math.max(0, normals.getY(i));
@@ -318,7 +319,7 @@ export function createWorld(scene) {
     return u+v<=1?vertices.getY(a)+(vertices.getY(d)-vertices.getY(a))*u+(vertices.getY(b)-vertices.getY(a))*v:vertices.getY(c)+(vertices.getY(b)-vertices.getY(c))*(1-u)+(vertices.getY(d)-vertices.getY(c))*(1-v);
   }
   campGroundView=createCampGroundView(group,{baseHeightAt:renderedTerrainHeight,groundMap,worldBounds:WORLD});
-  for(const object of group.children)if(object===groundMesh||object===ferns||object===flowers||object.name==='walkable-path')campGroundView.maskMesh(object);
+  for(const object of group.children)if(object===groundMesh||object===ferns||object===flowers||object.name==='walkable-path'||object.name==='summit-campsite')campGroundView.maskMesh(object);
   campGroundView.maskMaterial(grassMaterial);
   for(const item of interactables)if(item.type==='plant')item.object.traverse(o=>{if(o.isMesh)campGroundView.maskMesh(o);});
   updateSeason(0);

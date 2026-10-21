@@ -13,7 +13,7 @@ export function jumpPerson(state,{sprint=false}={}){
   state.vy=PERSON.jumpSpeed*scale;state.vx*=scale;state.vz*=scale;state.airSpeedScale=scale;
   state.grounded=false;state.landed=false;state.supportId=null;return true;
 }
-export function worldWaterAt(x,z){return (isWater(x,z)||x>COAST_START)&&terrainHeight(x,z)<-.25;}
+export function worldWaterAt(x,z){return isWater(x,z)&&terrainHeight(x,z)<-.25;}
 /** Fixed-substep capsule controller: world-space gravity, height-aware contacts and buoyancy. */
 export function stepPerson(previous,input,dt,environment={}){
   if(!Number.isFinite(dt)||dt<=0)return {...previous};

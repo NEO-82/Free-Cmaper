@@ -36,5 +36,5 @@ export function zoomDistance(distance, deltaY, deltaMode = 0) {
 }
 export const isFirstPerson = distance => distance <= .5;
 export function driverEye(kind) {
-  return kind === 'motorhome' ? {x:-.55,y:2.9,z:2.7} : kind === 'scooter' ? {x:0,y:2.5,z:-.2} : {x:-.55,y:2.65,z:.65};
+  return kind === 'motorhome' ? {x:-.605,y:3.19,z:2.97} : kind === 'scooter' ? {x:0,y:2.5,z:-.2} : {x:-.55,y:2.65,z:.65};
 }

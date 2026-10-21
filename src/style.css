@@ -22,3 +22,5 @@
 #rv-controls.hidden {display:none;}
 #rv-controls label {display:flex; flex-direction:column; gap:6px; flex:1; min-width:110px;}
 #rv-controls select {font:inherit;padding:10px;border-radius:8px;background:#f4efdd;color:#264b3c;}
+
+#mini-map{width:100%;height:100%;display:block}.map{background:#8bcad0!important;overflow:hidden}#home .travel-grid{margin:10px 0;gap:7px}#home .travel-grid button{padding:10px 6px}

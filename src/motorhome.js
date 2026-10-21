@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export const MOTORHOME_SIZE = Object.freeze({ width: 3.8, length: 8, height: 4.1 });
+export const MOTORHOME_SIZE = Object.freeze({ width: 4.18, length: 8.8, height: 4.51 });
 export const INTERIOR_CHOICES = Object.freeze({ wood: ['oak', 'walnut', 'white'], bedding: ['sage', 'blue', 'terracotta'], layout: ['left', 'right'] });
 export function normalizeInterior(value = {}) {
   return Object.fromEntries(Object.entries(INTERIOR_CHOICES).map(([key, choices]) => [key, choices.includes(value?.[key]) ? value[key] : choices[0]]));
@@ -38,30 +38,33 @@ export function createMotorhomeInterior(config = {}) {
     }
     // The window is an actual hole in the wall; no opaque box sits behind the glass.
     for(const sign of [-1,1]) {
-      box('wall lower','#f4eddd',sign*1.8,.675,0,.1,1.35,6);
-      box('wall upper','#f4eddd',sign*1.8,2.6,0,.1,.7,6);
-      box('wall rear','#f4eddd',sign*1.8,1.8,-1.75,.1,.9,2.5);
-      box('wall front','#f4eddd',sign*1.8,1.8,2.1,.1,.9,1.8);
-      glass('window',sign*1.8,1.8,.35,.025,.9,1.7);
-      for(const y of [1.32,2.28])box('window frame',wood,sign*1.73,y,.35,.07,.06,1.8);
-      for(const z of [-.53,1.23])box('window frame',wood,sign*1.73,1.8,z,.07,.96,.06);
+      const ys=[0,1.3,2.2,2.45,2.95],zs=[-3,-1.55,-.45,-.2,1.2,3];
+      for(let i=1;i<ys.length;i++)for(let j=1;j<zs.length;j++){
+        const y=(ys[i-1]+ys[i])/2,z=(zs[j-1]+zs[j])/2;
+        const window=z>-.2&&z<1.2&&y>1.3&&y<2.2;
+        const door=sign===1&&z>-1.55&&z<-.45&&y<2.45;
+        if(!window&&!door)box('wall panel','#f4eddd',sign*1.8,y,z,.1,ys[i]-ys[i-1],zs[j]-zs[j-1]);
+      }
+      glass('window',sign*1.8,1.75,.5,.025,.9,1.4);
+      for(const y of [1.27,2.23])box('window frame',wood,sign*1.73,y,.5,.07,.06,1.5);
+      for(const z of [-.23,1.23])box('window frame',wood,sign*1.73,1.75,z,.07,.96,.06);
     }
     box('rear wall','#eee8da',0,1.4,-3,3.6,3,.1);
     box('cab divider lower',wood,0,.75,3,3.6,1.5,.1);
     box('cab divider upper',wood,0,2.6,3,3.6,.7,.1);
     for(const sign of [-1,1])box('cab divider side',wood,sign*1.3,1.875,3,1,.75,.1);
     glass('cab window',0,1.875,3,1.6,.75,.025);
-    box('bed base',wood,0,.35,-2,3.25,.7,1.7,true);
-    box('mattress','#f3eedc',0,.79,-2,3.2,.2,1.65);
-    box('duvet',cloth,0,.93,-1.8,3.1,.15,1.1);
+    box('bed base',wood,0,.35,-2.3,3.25,.7,1.2,true);
+    box('mattress','#f3eedc',0,.79,-2.3,3.2,.2,1.15);
+    box('duvet',cloth,0,.93,-2.1,3.1,.15,.8);
     for(const x of [-.85,.85])box('pillow','#fff5db',x,.98,-2.48,.85,.2,.4);
-    box('kitchen cabinet',wood,side*1.2,.55,0,.95,1.1,1.85,true);
-    for(const z of [-.55,.1,.65]){box('drawer handle','#515e54',side*.713,.85,z,.04,.05,.32);}
-    box('counter','#eee7d8',side*1.2,1.14,0,1.02,.12,1.95);
-    box('sink rim','#7c999b',side*1.2,1.21,-.45,.65,.05,.55);
-    box('sink basin','#435c61',side*1.2,1.24,-.45,.46,.03,.38);
-    box('tap','#a6b8af',side*1.4,1.4,-.45,.06,.35,.06);
-    for(const z of [.25,.65]) {
+    box('kitchen cabinet',wood,side*1.2,.55,.45,.95,1.1,1.5,true);
+    for(const z of [0,.45,.9]){box('drawer handle','#515e54',side*.713,.85,z,.04,.05,.32);}
+    box('counter','#eee7d8',side*1.2,1.14,.45,1.02,.12,1.6);
+    box('sink rim','#7c999b',side*1.2,1.21,0,.65,.05,.55);
+    box('sink basin','#435c61',side*1.2,1.24,0,.46,.03,.38);
+    box('tap','#a6b8af',side*1.4,1.4,0,.06,.35,.06);
+    for(const z of [.7,1.1]) {
       const ring=new THREE.Mesh(new THREE.TorusGeometry(.15,.025,8,24),new THREE.MeshStandardMaterial({color:'#404a48'}));ring.rotation.x=Math.PI/2;ring.position.set(side*1.2,1.23,z);furniture.add(ring);
     }
     box('shower tray','#e7e6d9',-side*1.2,.05,1.8,.95,.1,1.4,true);
@@ -71,12 +74,12 @@ export function createMotorhomeInterior(config = {}) {
     const seat = new THREE.Mesh(new THREE.TorusGeometry(.24,.055,10,32),new THREE.MeshStandardMaterial({color:'#faf5e9'}));
     seat.name='toilet seat';seat.rotation.x=Math.PI/2;seat.scale.y=1.2;seat.position.set(-side*1.2,.77,1.9);furniture.add(seat);
     box('shower head','#9caea5',-side*1.2,2.5,2.7,.3,.08,.2);
-    box('entry door','#aac0b2',1.73,1.2,-1.05,.03,2.3,.85);
+    box('entry door','#aac0b2',1.73,1.2,-1.0,.03,2.3,1.1);
     targets = [
-      {id:'rvBed', x:0,z:-1.05}, {id:'rvCook',x:side*.55,z:0},
-      {id:'rvToilet',x:-side*.55,z:1.8}, {id:'rvExit',x:.65,z:-1.05}, {id:'rvDrive',x:0,z:2.7},
+      {id:'rvBed', x:0,z:-1.4}, {id:'rvCook',x:side*.55,z:.45},
+      {id:'rvToilet',x:-side*.55,z:1.8}, {id:'rvExit',x:.95,z:-1.0}, {id:'rvDrive',x:0,z:2.7},
     ];
-    position.set(0,0,-.7);
+    position.set(.41,0,-1.0);
   }
   rebuild(config);
   return { scene, position, get settings(){return {...settings};}, get targets(){return targets;}, get resting(){return resting;},
@@ -86,12 +89,13 @@ export function createMotorhomeInterior(config = {}) {
       if(exterior!==vehicleRoot){exterior=vehicleRoot;exteriorWasVisible=vehicleRoot.visible;}
       parent.updateWorldMatrix(true,false);vehicleRoot.updateWorldMatrix(true,false);
       parent.add(scene);
-      const transform=new THREE.Matrix4().copy(parent.matrixWorld).invert().multiply(vehicleRoot.matrixWorld).multiply(new THREE.Matrix4().makeTranslation(0,.9,-.9));
+      const transform=new THREE.Matrix4().copy(parent.matrixWorld).invert().multiply(vehicleRoot.matrixWorld).multiply(new THREE.Matrix4().makeScale(1.1,1.1,1.1)).multiply(new THREE.Matrix4().makeTranslation(0,.9,-.9));
       transform.decompose(scene.position,scene.quaternion,scene.scale);scene.updateMatrixWorld(true);
       exterior.visible=false;
     },
     toWorld(point){scene.updateWorldMatrix(true,false);return scene.localToWorld(point.clone());},
     toggleRest(){resting=!resting;},
+    canStand(x,z){return Math.abs(x)<=1.45&&Math.abs(z)<=2.65&&!obstacles.some(o=>Math.abs(x-o.x)<o.w/2+.22&&Math.abs(z-o.z)<o.d/2+.22);},
     move(dx,dz){
       if(resting)return;
       // Small steps prevent clipping across furniture even after a slow frame.

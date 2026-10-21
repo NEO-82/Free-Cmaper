@@ -5,7 +5,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { resolveMovement, terrainHeight, canOccupy, isWater } from './terrain.js';
 
 export const VEHICLES = Object.freeze({
-  motorhome: Object.freeze({ maxSpeed: 48 * 2 / 3, acceleration: 12, brake: 28, turnRate: 1.05, radius: 4.2, wheelRadius: .65, length: 8, wheelBase: 5.1, track: 3.1, travel: .4 }),
+  motorhome: Object.freeze({ maxSpeed: 48 * 2 / 3, acceleration: 12, brake: 28, turnRate: 1.05, radius: 4.62, wheelRadius: .715, length: 8.8, wheelBase: 5.61, track: 3.41, travel: .44 }),
   sedan: Object.freeze({ maxSpeed: 64 * 2 / 3, acceleration: 18, brake: 30, turnRate: 1.45, radius: 2.8, wheelRadius: .55, length: 5.8, wheelBase:3.7, track:2.56, travel:.3 }),
   suv: Object.freeze({ maxSpeed: 56 * 2 / 3, acceleration: 16, brake: 30, turnRate: 1.3, radius: 3, wheelRadius: .67, length: 6.2, wheelBase:4, track:2.74, travel:.44 }),
   scooter: Object.freeze({ maxSpeed: 40 * 2 / 3, acceleration: 14, brake: 24, turnRate: 1.9, radius: 1.35, wheelRadius: .40, length: 2.8, wheelBase:1.84, track:0, travel:.20 }),
@@ -24,14 +24,17 @@ export function stepDrive(state, input, dt, colliders = [], environment = {}) {
   let speed = approach(state.speed, target, dt * (braking ? config.brake : throttle ? config.acceleration : 5));
   if(!input.brake&&!state.airborne)speed+=9.8*Math.sin(terrain.pitch)*dt;
   if((input.brake&&Math.abs(speed)<config.brake*dt)||(!throttle&&Math.abs(speed)<.05))speed=0;
-  const yawRate=steer*config.turnRate*Math.min(1,Math.abs(speed)/5)*Math.sign(speed)/(1+speed*speed/180);
+  // More tyre authority at speed, with a lateral-acceleration cap and smooth steering return.
+  const gripYaw=Math.min(config.turnRate/(1+speed*speed/900),12.5/Math.max(1,Math.abs(speed)));
+  const targetYaw=steer*gripYaw*Math.min(1,Math.abs(speed)/4)*Math.sign(speed);
+  const yawRate=approach(state.yawRate??0,targetYaw,dt*5.5);
   const heading = state.heading + yawRate*dt;
   const delta = { x: Math.sin(heading) * speed * dt, z: Math.cos(heading) * speed * dt };
   const moved = resolveMovement(state, delta, colliders, config.radius);
   const desired = Math.hypot(delta.x, delta.z), actual = Math.hypot(moved.x - state.x, moved.z - state.z);
   const blocked = desired > .005 && actual < desired * .45;
   if (blocked) speed = 0;
-  const next={...state,...moved,heading,speed,blocked},ground=sampleWheelGround(next,config,heightAt);
+  const next={...state,...moved,heading,speed,blocked,yawRate},ground=sampleWheelGround(next,config,heightAt);
   return {...next,...stepChassis(next,ground,dt,config,{acceleration:(speed-state.speed)/dt,turnRate:yawRate})};
 }
 /** Find dry, unobstructed ground beside the stopped vehicle, never inside a wall or water. */
@@ -56,9 +59,9 @@ export function createVehicle(parent, kind, origin, heading = 0, environment={})
   const box = (c, x, y, z, w, h, d, glass = false) => part(new RoundedBoxGeometry(w, h, d, 3, .10), c, x, y, z, glass);
   const cylinder = (c, x, y, z, radius, depth) => part(new THREE.CylinderGeometry(radius, radius, depth, 24), c, x, y, z);
   const scooter = kind === 'scooter', suv = kind === 'suv', color = scooter ? '#d9907f' : suv ? '#8eaf99' : '#e6bd73';
-  const tyre = VEHICLES[kind].wheelRadius;
+  const tyre = VEHICLES[kind].wheelRadius/(kind==='motorhome'?1.1:1);
   for (const side of scooter ? [0] : [-1, 1]) for (const front of [-1, 1]) {
-    const pivot = new THREE.Group(); pivot.position.set(side * VEHICLES[kind].track / 2, tyre, front * VEHICLES[kind].wheelBase / 2); root.add(pivot);
+    const pivot = new THREE.Group(); pivot.position.set(side * VEHICLES[kind].track / 2 / (kind==='motorhome'?1.1:1), tyre, front * VEHICLES[kind].wheelBase / 2 / (kind==='motorhome'?1.1:1)); root.add(pivot);
     const wheel = new THREE.Group(); pivot.add(wheel);
     const tire = part(new THREE.CylinderGeometry(tyre, tyre, scooter ? .20 : .40, 28), '#454944', 0, 0, 0); tire.rotation.z = Math.PI / 2; wheel.add(tire);
     const hub = part(new THREE.CylinderGeometry(tyre * .59, tyre * .59, scooter ? .22 : .43, 20), '#e5ddc8', 0, 0, 0); hub.rotation.z = Math.PI / 2; wheel.add(hub);
@@ -117,6 +120,10 @@ export function createVehicle(parent, kind, origin, heading = 0, environment={})
     const steering = part(new THREE.TorusGeometry(.25, .035, 8, 24), '#4c6054', -.55, 2.02, .68); steering.rotation.x = -.4;
     if (suv) for (const side of [-1, 1]) box('#6f8170', side * .9, 3.65, -.25, .10, .12, 2.4);
   }
+  if(kind==='motorhome'){
+    root.traverse(o=>{o.position.multiplyScalar(1.1);});geometries.forEach(g=>g.scale(1.1,1.1,1.1));
+  }
+  const contactRadius=VEHICLES[kind].wheelRadius;
   let state = { kind, x: origin.x, z: origin.z, heading, speed: 0, blocked: false };
   const model = { root, wheels, frontWheels, config: VEHICLES[kind], get state() { return state; },
     update(next, dt = 0, steering = 0) {
@@ -125,17 +132,17 @@ export function createVehicle(parent, kind, origin, heading = 0, environment={})
       root.position.set(state.x,state.bodyY,state.z);root.rotation.set(state.pitch,state.heading,state.roll,'YXZ');root.updateMatrixWorld(true);
       const up=Math.max(.5,Math.cos(state.pitch)*Math.cos(state.roll));
       const heightAt=environment.heightAt??pathSurfaceHeight;
-      wheels.forEach(wheel=>{const pivot=wheel.parent;let suspension=tyre;
+      wheels.forEach(wheel=>{const pivot=wheel.parent;let suspension=contactRadius;
         for(let i=0;i<4;i++){
           const point=new THREE.Vector3(pivot.position.x,suspension,pivot.position.z).applyQuaternion(root.quaternion).add(root.position);
-          suspension+=((heightAt(point.x,point.z)+tyre)-point.y)/up;
-          suspension=THREE.MathUtils.clamp(suspension,tyre-VEHICLES[kind].travel,tyre+VEHICLES[kind].travel);
+          suspension+=((heightAt(point.x,point.z)+contactRadius)-point.y)/up;
+          suspension=THREE.MathUtils.clamp(suspension,contactRadius-VEHICLES[kind].travel,contactRadius+VEHICLES[kind].travel);
         }
         pivot.position.y=suspension;
       });
-      wheels.forEach(w => w.rotation.x += state.speed * dt / tyre); frontWheels.forEach(w => w.rotation.y = steering * .35);
+      wheels.forEach(w => w.rotation.x += state.speed * dt / contactRadius); frontWheels.forEach(w => w.rotation.y = steering * .35);
     },
-    collider() { return { kind: 'circle', x: state.x, z: state.z, radius: VEHICLES[kind].radius,minY:root.position.y,maxY:root.position.y+(kind==='motorhome'?4.2:scooter?2.5:3.7), id: 'player-vehicle' }; },
+    collider() { return { kind: 'circle', x: state.x, z: state.z, radius: VEHICLES[kind].radius,minY:root.position.y,maxY:root.position.y+(kind==='motorhome'?4.62:scooter?2.5:3.7), id: 'player-vehicle' }; },
     dispose() { root.removeFromParent(); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); },
   };
   model.update(state); return model;
