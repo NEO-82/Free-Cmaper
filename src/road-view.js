@@ -14,7 +14,6 @@ export function tunnelWallColliders(tunnels=TUNNELS){
  for(const tunnel of tunnels){const track=tunnel.track.filter((_,i)=>i%4===0||i===tunnel.track.length-1);
   for(let i=1;i<track.length;i++){const a=track[i-1],b=track[i],dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz),heading=Math.atan2(dx,dz);if(!len)continue;
    for(const side of [-1,1]){const x=(a.x+b.x)/2+side*dz/len*11.6,z=(a.z+b.z)/2-side*dx/len*11.6,width=.8,depth=len+1;
-    const other=roadSurfaceAt(x,z,{altitude:a.y,excludeRoad:tunnel.road});if(other.distance<12&&Math.abs(other.height-a.y)<2)continue;
     const ex=Math.abs(Math.cos(heading))*width/2+Math.abs(Math.sin(heading))*depth/2,ez=Math.abs(Math.sin(heading))*width/2+Math.abs(Math.cos(heading))*depth/2;
     walls.push({kind:'obb',id:tunnel.id+'-wall',x,z,width,depth,heading,minX:x-ex,maxX:x+ex,minZ:z-ez,maxZ:z+ez,minY:Math.min(a.y,b.y)-.1,maxY:Math.max(a.y,b.y)+10.7});
    }
@@ -80,12 +79,10 @@ export function createRoadView(parent,groundMesh){
   const track=tunnel.track.filter((_,i)=>i%4===0||i===tunnel.track.length-1),positions=[],indices=[];
   track.forEach((p,i)=>{const a=track[Math.max(0,i-1)],b=track[Math.min(track.length-1,i+1)],dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz)||1;
    for(const [x,y] of section)positions.push(p.x+dz/len*x,p.y+y,p.z-dx/len*x);
-   for(let j=0;i&&j<section.length-1;j++){const k=i*section.length+j,prev=k-section.length;const mx=(positions[prev*3]+positions[k*3])/2,mz=(positions[prev*3+2]+positions[k*3+2])/2;
-    const other=roadSurfaceAt(mx,mz,{altitude:p.y,excludeRoad:tunnel.road});
-    if(other.distance<11.8&&Math.abs(other.height-p.y)<2)continue;
+   for(let j=0;i&&j<section.length-1;j++){const k=i*section.length+j,prev=k-section.length;
     indices.push(prev,k,prev+1,prev+1,k,k+1);}
    if(i%2===0){const heading=Math.atan2(dx,dz);dummy.position.set(p.x,p.y+10,p.z);dummy.rotation.set(0,heading,0);dummy.scale.set(1,1,1);dummy.updateMatrix();fixtureMatrices.push(dummy.matrix.clone());fixtures.push({x:p.x,y:p.y+8.5,z:p.z});
-    for(const side of [-1,1]){const lx=p.x+dz/len*side*11.04,lz=p.z-dx/len*side*11.04,other=roadSurfaceAt(lx,lz,{altitude:p.y,excludeRoad:tunnel.road});if(other.distance<12&&Math.abs(other.height-p.y)<2)continue;dummy.position.set(lx,p.y+1.1,lz);dummy.rotation.set(0,heading,0);dummy.updateMatrix();reflectors.push(dummy.matrix.clone());}
+    for(const side of [-1,1]){const lx=p.x+dz/len*side*11.04,lz=p.z-dx/len*side*11.04;dummy.position.set(lx,p.y+1.1,lz);dummy.rotation.set(0,heading,0);dummy.updateMatrix();reflectors.push(dummy.matrix.clone());}
    }
   });
   const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geo.setIndex(indices);geo.computeVertexNormals();const shell=new THREE.Mesh(geo,concrete);shell.name=tunnel.id;root.add(shell);
@@ -96,11 +93,7 @@ export function createRoadView(parent,groundMesh){
    const ring=new THREE.BufferGeometry();ring.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));ring.setIndex(tri);ring.computeVertexNormals();root.add(new THREE.Mesh(ring,portalMaterial));
   }
  }
- // Shared junction chambers keep crossing arches above the full driving clearance.
- for(const junction of ROAD_JUNCTIONS){
-  const p=roadSurfaceAt(junction.x,junction.z,{altitude:2.5});if(!p.tunnel)continue;
-  const ceiling=new THREE.Mesh(new THREE.BoxGeometry(38,.35,38),concrete);ceiling.name='tunnel junction ceiling';ceiling.position.set(junction.x,p.height+10.7,junction.z);root.add(ceiling);
- }
+
  function instances(geometry,material,matrices){const mesh=new THREE.InstancedMesh(geometry,material,matrices.length);matrices.forEach((m,i)=>mesh.setMatrixAt(i,m));root.add(mesh);return mesh;}
  instances(new THREE.BoxGeometry(2.4,.12,.5),led,fixtureMatrices);instances(new THREE.BoxGeometry(.12,.22,.8),yellow,reflectors);
  // Cut only the portal opening out of the landscape; the mountain roof stays intact.

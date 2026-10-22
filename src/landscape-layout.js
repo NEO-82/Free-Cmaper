@@ -70,7 +70,7 @@ export const LAKE=Object.freeze({x:-800,z:250,radiusX:55,radiusZ:42});
 // Local +Z faces the access lane. Entire settlements remain clear of main roads.
 export const VILLAGE_SITES=Object.freeze([
  {x:-923,z:725,heading:-2.5442737980723926,id:'stone-village',name:'돌담 마을'},
- {x:176,z:38,heading:-.579861123394205,id:'pine-village',name:'솔바람 마을'},
+ {x:176,z:38,heading:Math.PI/2,id:'pine-village',name:'솔바람 마을'},
  {x:641,z:712,heading:2.257152245384367,id:'sunset-village',name:'노을 마을'},
 ].map(v=>Object.freeze({...v,radius:82})));
 export function villagePoint(v,x,z){const c=Math.cos(v.heading),s=Math.sin(v.heading);return {x:v.x+c*x+s*z,z:v.z-s*x+c*z};}

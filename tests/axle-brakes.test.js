@@ -11,10 +11,10 @@ test('service braking physically uses both axles while the handbrake applies rea
  for(const [kind,config] of Object.entries(VEHICLES))for(const direction of [-1,1]){
   const initial={kind,...PARKING,heading:Math.PI/2,speed:direction*20};
   const service=drive(initial,{brake:true},.4),rear=drive(initial,{handbrake:true},.4);
-  assert.equal(service.axleBrakes.front,config.brake*2.125/2);assert.equal(service.axleBrakes.rear,config.brake*2.125/2);
-  assert.equal(rear.axleBrakes.front,0);assert.equal(rear.axleBrakes.rear,9.35);
-  assert.ok(Math.abs(Math.abs(service.speed)-Math.max(0,20-config.brake*2.125*.4))<.01);
-  assert.ok(Math.abs(Math.abs(rear.speed)-(20-9.35*.4))<.01);
+  assert.equal(service.axleBrakes.front,config.brake*1.0625/2);assert.equal(service.axleBrakes.rear,config.brake*1.0625/2);
+  assert.equal(rear.axleBrakes.front,0);assert.equal(rear.axleBrakes.rear,4.675);
+  assert.ok(Math.abs(Math.abs(service.speed)-Math.max(0,20-config.brake*1.0625*.4))<.01);
+  assert.ok(Math.abs(Math.abs(rear.speed)-(20-4.675*.4))<.01);
   assert.ok(Math.hypot(rear.x-initial.x,rear.z-initial.z)>Math.hypot(service.x-initial.x,service.z-initial.z));
   assert.equal(rear.skidAxles.front,0);assert.ok(rear.skidAxles.rear>.5);
   const brakingStep=stepDrive(initial,{brake:true},1/120,[],flat);assert.ok(brakingStep.skidAxles.front>.5&&brakingStep.skidAxles.rear>.5);
@@ -25,11 +25,11 @@ test('S braking, parking and simultaneous brakes preserve four-wheel service for
  for(const [kind,config] of Object.entries(VEHICLES)){
   const initial={kind,...PARKING,heading:0,speed:20};
   for(const input of [{backward:true},{brake:true,handbrake:true},{brake:true,park:true}]){
-   const state=stepDrive(initial,input,1/60,[],flat);assert.equal(state.axleBrakes.front,config.brake*2.125/2);assert.equal(state.axleBrakes.rear,config.brake*2.125/2);
+   const state=stepDrive(initial,input,1/60,[],flat);assert.equal(state.axleBrakes.front,config.brake*1.0625/2);assert.equal(state.axleBrakes.rear,config.brake*1.0625/2);
    if(input.park){assert.equal(state.braking,false);assert.equal(state.skidIntensity,0);}
   }
   let slope={...initial,speed:3};for(let i=0;i<120;i++)slope=stepDrive(slope,{backward:true},1/120,[],{heightAt:(x,z)=>2.5-(z-PARKING.z)*.1,waterSurfaceAt:()=>null});assert.ok(slope.speed<0,'S must brake then reverse on a downhill slope');
-  const slow=drive({...initial,speed:3},{handbrake:true},1);assert.equal(slow.speed,0);assert.equal(slow.axleBrakes.front,0);assert.equal(slow.axleBrakes.rear,config.brake*.85);
+  const slow=drive({...initial,speed:3},{handbrake:true},1);assert.equal(slow.speed,0);assert.equal(slow.axleBrakes.front,0);assert.equal(slow.axleBrakes.rear,config.brake*.425);
  }
 });
 

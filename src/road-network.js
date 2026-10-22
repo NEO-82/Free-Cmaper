@@ -1,3 +1,4 @@
+import {findRoadJunctions} from './road-topology.js';
 import {ARRIVAL,BRIDGE,SUMMITS,VILLAGE_SITES,villagePoint,referencePoint,smoothPath,naturalLandscapeHeight,clamp,smooth} from './landscape-layout.js';
 export const ROAD_WIDTH=22,PAVEMENT_WIDTH=18,TRAIL_WIDTH=22,TRAIL_SAMPLES=1200;
 const zigzag=[[400,520],[420,460],[360,420],[-340,380],[-380,320],[-320,280],[280,240],[320,180],[260,140],[-220,110],[-250,65],[-190,20],[-120,-30],[-150,-110],[-70,-140],[40,-100],[65,-60],[0,0]];
@@ -11,22 +12,23 @@ export const SHOP_SITES=Object.freeze([{id:'parking',x:ARRIVAL.x-15,z:ARRIVAL.z-
 export const SHOP=SHOP_SITES[0];
 const coastRefs=[[75,320],[65,272],[85,235],[115,206],[160,180],[190,153],[215,112],[253,81],[271,53],[310,49],[352,50],[362,76],[402,87],[439,99],[437,142],[436,181],[444,216],[467,235],[493,240],[501,261],[491,275],[475,277],[459,266],[447,255],[414,275],[402,301],[379,314],[352,331],[326,343],[300,349],[270,353],[234,359],[195,354],[159,352],[127,349],[98,338]];
 const refRoute=points=>points.map(referencePoint);
-const coastControls=refRoute(coastRefs),bridgeJunction=referencePoint([75,320]);
+const coastControls=refRoute(coastRefs),bridgeJunction=arcPath(coastControls,true).points.reduce((a,b)=>Math.hypot(a.x-BRIDGE.endX-80,a.z-BRIDGE.z)<Math.hypot(b.x-BRIDGE.endX-80,b.z-BRIDGE.z)?a:b);
 const mainNetwork=[
- [ARRIVAL,{x:BRIDGE.startX,z:BRIDGE.z},{x:BRIDGE.endX,z:BRIDGE.z},{x:BRIDGE.endX+110,z:BRIDGE.z},bridgeJunction],
+ [ARRIVAL,{x:BRIDGE.startX,z:BRIDGE.z},{x:BRIDGE.endX,z:BRIDGE.z},{x:BRIDGE.endX+60,z:BRIDGE.z},bridgeJunction],
  coastControls,
- refRoute([[65,272],[116,245],[195,216],[278,227],[341,232],[414,275]]),
- refRoute([[253,81],[233,187],[278,227],[230,314],[234,359]]),
- refRoute([[352,50],[345,132],[367,210],[341,232],[396,294],[402,301]]),
- refRoute([[160,180],[195,216],[233,187],[278,227],[345,132],[439,99]]),
- [referencePoint([278,227]),starts[0]],
- [referencePoint([341,232]),starts[1]],
+ // Two independent inland bypasses connect through the coastal loop.
+ // Mountain base hubs each have two approach arms, one summit arm and one shop driveway.
+ [referencePoint([65,272]),{x:-950,z:550},{x:-730,z:380},{x:-520,z:270},{x:-220,z:260},starts[0]],
+ [starts[0],{x:230,z:310},{x:350,z:170},{x:323,z:55},{x:360,z:-80},{x:460,z:-360},{x:660,z:-650},referencePoint([352,50])],
+ [referencePoint([414,275]),{x:900,z:610},{x:790,z:560},{x:640,z:540},{x:440,z:600},starts[1]],
+ [starts[1],{x:170,z:830},{x:80,z:1070},referencePoint([234,359])],
  ...starts.map((p,i)=>[p,{x:SHOP_SITES[i+2].x,z:SHOP_SITES[i+2].z+14}]),
 ];
 const mainPaths=mainNetwork.map((p,i)=>arcPath(p,i===1));
+const mainHubs=[bridgeJunction,referencePoint([65,272]),referencePoint([352,50]),referencePoint([414,275]),referencePoint([234,359]),...starts];
 const accessNetwork=VILLAGE_SITES.map(v=>{
  const entry=villagePoint(v,0,96),end=villagePoint(v,0,21);
- const anchor=mainPaths.flatMap(p=>p.points).reduce((a,b)=>Math.hypot(a.x-entry.x,a.z-entry.z)<Math.hypot(b.x-entry.x,b.z-entry.z)?a:b);
+ const anchor=mainPaths.flatMap(p=>p.points).filter(p=>naturalLandscapeHeight(p.x,p.z)<10&&mainHubs.every(j=>Math.hypot(p.x-j.x,p.z-j.z)>160)).reduce((a,b)=>Math.hypot(a.x-entry.x,a.z-entry.z)<Math.hypot(b.x-entry.x,b.z-entry.z)?a:b);
  return [anchor,entry,end];
 });
 export const ROAD_NETWORK=Object.freeze([...mainNetwork,...accessNetwork]);
@@ -40,10 +42,11 @@ function makeRoad(id,path,{summit=null,closed=false,kind='inland'}={}){
 }
 export const ROADS=paths.map((p,i)=>makeRoad(i===0?'gateway':i===1?'coastal-loop':'inland-'+i,p,{kind:i>=mainNetwork.length?'village':i===1?'coast':'inland',closed:i===1}));
 export const TRAILS=SUMMITS.map((mountain,index)=>{const road=makeRoad(mountain.id+'-summit',summitPaths[index],{summit:mountain,kind:'summit'});ROADS.push(road);return {...road,mountain,index};});
+const openJunctions=findRoadJunctions(ROADS);
 // Every low road that crosses solid mountain cover receives a complete tunnel.
 export const TUNNELS=[];
 for(const road of ROADS.filter(r=>!r.summit&&r.id!=='gateway')){
- const flags=road.track.map(p=>naturalLandscapeHeight(p.x,p.z)>p.y+13);let begin=-1;
+ const flags=road.track.map(p=>naturalLandscapeHeight(p.x,p.z)>p.y+13&&openJunctions.every(j=>Math.hypot(p.x-j.x,p.z-j.z)>90));let begin=-1;
  for(let i=0;i<=flags.length;i++){
   if(flags[i]&&begin<0)begin=i;
   if((!flags[i]||i===flags.length)&&begin>=0){const end=i-1;
@@ -78,8 +81,7 @@ export function trailSurfaceAt(x,z){const p=roadSurfaceAt(x,z,{summitOnly:true})
 export const roadDistance=(x,z)=>roadSurfaceAt(x,z).distance;
 export function tunnelAt(x,z,altitude=-Infinity){const p=roadSurfaceAt(x,z,{altitude:Number.isFinite(altitude)?altitude:-100});return p.tunnel&&p.distance<10.8&&altitude<p.height+11?p:null;}
 export function tunnelCeilingAt(x,z,altitude=-Infinity){const p=tunnelAt(x,z,altitude);return p?p.height+5.8+4.8*Math.sqrt(Math.max(0,1-(p.distance/11.2)**2)):Infinity;}
-const counts=new Map();for(const route of ROAD_NETWORK)for(const p of route){const key=`${p.x.toFixed(1)}:${p.z.toFixed(1)}`;const row=counts.get(key)??{...p,count:0};row.count++;counts.set(key,row);}
-export const ROAD_JUNCTIONS=[...counts.values()].filter(p=>p.count>1);
+export const ROAD_JUNCTIONS=findRoadJunctions(ROADS);
 
 /** Lower the rendered terrain beneath every exposed road, including crossings.
  * Six metres of margin cover a four-metre terrain cell diagonal. Tunnel roofs stay intact. */

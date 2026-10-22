@@ -28,7 +28,8 @@ test('a running jump crosses the actual river without switching to swimming in m
   assert.equal(swam,false);assert.ok(p.x>x+12);assert.equal(p.grounded,true);
 });
 test('falling into deep water activates buoyancy, dive/rise, and an actual shallow bank can be walked out',()=>{
-  const z=400,x=riverX(z);let p=createPerson({x,y:3,z});p.grounded=false;p=simulate(p,{speed:0},4,{});
+  // The inland bypass changed the old z=400 road-bank crossing; use the natural shallow bank.
+  const z=350,x=riverX(z);let p=createPerson({x,y:3,z});p.grounded=false;p=simulate(p,{speed:0},4,{});
   assert.equal(p.swimming,true);assert.ok(p.y<-.5&&p.y>-2);
   const surface=p.y;p=simulate(p,{speed:0,dive:true},.15,{});assert.ok(p.diveDepth>0);p=simulate(p,{speed:0,rise:true},2,{});assert.equal(p.diveDepth,0);
   p=simulate(p,{x:1,speed:3.4},6,{});assert.ok(p.x>x+7);assert.equal(p.swimming,false);assert.equal(p.grounded,true);
