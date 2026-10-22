@@ -6,12 +6,24 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { resolveMovement, travelHeight, terrainHeight, canOccupy, isWater, waterSurfaceAt } from './terrain.js';
 
 export const VEHICLES = Object.freeze({
-  motorhome: Object.freeze({ maxSpeed: 72, maxWadeDepth:0.65, acceleration: 12, brake: 28, turnRate: 1.05, radius: 4.62, wheelRadius: .715, length: 8.8, wheelBase: 5.61, track: 3.41, travel: .44 }),
-  sedan: Object.freeze({ maxSpeed: 96, maxWadeDepth:0.5, acceleration: 18, brake: 30, turnRate: 1.45, radius: 2.8, wheelRadius: .55, length: 5.8, wheelBase:3.7, track:2.56, travel:.3 }),
-  suv: Object.freeze({ maxSpeed: 84, maxWadeDepth:0.7, acceleration: 16, brake: 30, turnRate: 1.3, radius: 3, wheelRadius: .67, length: 6.2, wheelBase:4, track:2.74, travel:.44 }),
-  scooter: Object.freeze({ maxSpeed: 60, maxWadeDepth:0.3, acceleration: 14, brake: 24, turnRate: 1.9, radius: 1.35, wheelRadius: .40, length: 2.8, wheelBase:1.84, track:0, travel:.20 }),
+  motorhome: Object.freeze({ drivetrain:'awd', maxSpeed: 72, maxWadeDepth:0.65, acceleration: 12, brake: 28, turnRate: 1.05, radius: 4.62, wheelRadius: .715, length: 8.8, wheelBase: 5.61, track: 3.41, travel: .44 }),
+  sedan: Object.freeze({ drivetrain:'rwd', maxSpeed: 96, maxWadeDepth:0.5, acceleration: 18, brake: 30, turnRate: 1.45, radius: 2.8, wheelRadius: .55, length: 5.8, wheelBase:3.7, track:2.56, travel:.3 }),
+  suv: Object.freeze({ drivetrain:'awd', maxSpeed: 84, maxWadeDepth:0.7, acceleration: 16, brake: 30, turnRate: 1.3, radius: 3, wheelRadius: .67, length: 6.2, wheelBase:4, track:2.74, travel:.44 }),
+  scooter: Object.freeze({ drivetrain:'rwd', maxSpeed: 60, maxWadeDepth:0.3, acceleration: 14, brake: 24, turnRate: 1.9, radius: 1.35, wheelRadius: .40, length: 2.8, wheelBase:1.84, track:0, travel:.20 }),
 });
 const approach = (v, target, step) => v < target ? Math.min(target, v + step) : Math.max(target, v - step);
+export const TYRE_GRIP=1.2;
+/** Service braking acts on both axles; a handbrake adds no front-axle force. */
+export function axleBrakeForces(config,{service=false,handbrake=false,sliding=false}={}){
+ const front=service?config.brake/2:0;
+ const rear=Math.max(front,handbrake?(sliding?5.5:config.brake/2):0);
+ return {front,rear};
+}
+/** Equal front/rear drive in AWD, all drive at the rear in RWD; locked tyres transmit no drive. */
+export function axleDriveForces(config,{throttle=0,handbrake=false,frontGrip=TYRE_GRIP,rearGrip=TYRE_GRIP}={}){
+ const frontShare=config.drivetrain==='awd'?.5:0,rearShare=1-frontShare;
+ return {front:frontShare?config.acceleration*throttle*frontShare*Math.min(1,Math.max(0,frontGrip/TYRE_GRIP)):0,rear:handbrake?0:config.acceleration*throttle*rearShare*Math.min(1,Math.max(0,rearGrip/TYRE_GRIP))};
+}
 /** Check tyres and centre, so shallow water is accessible without submerging the vehicle. */
 export function vehicleWaterAllowed(state,config,heightAt=terrainHeight,surfaceAt=waterSurfaceAt){
  return [{x:state.x,z:state.z},...sampleWheelGround(state,config,heightAt).wheels].every(p=>{
@@ -33,20 +45,27 @@ function driveStep(state,input,dt,colliders,environment){
  let longitudinal=vx*f.x+vz*f.z,lateral=vx*r.x+vz*r.z;
  const uphill=Math.max(0,-Math.sin(ground.pitch)*Math.sign(throttle||longitudinal));
  const handbrake=!!input.handbrake,sliding=handbrake&&Math.hypot(vx,vz)>8&&!state.airborne;
- const target=input.brake||handbrake?0:throttle>0?config.maxSpeed/(1+uphill*1.4):throttle<0?-config.maxSpeed*.4/(1+uphill*1.4):0;
- const deceleration=input.brake?config.brake:handbrake?(sliding?5.5:config.brake):longitudinal*target<0?config.brake:throttle?config.acceleration:5;
- longitudinal=approach(longitudinal,target,dt*deceleration);
- if(!input.brake&&!handbrake&&!state.airborne)longitudinal+=9.8*Math.sin(ground.pitch)*dt;
- const absSpeed=Math.abs(longitudinal),gripYaw=Math.min(config.turnRate/(1+absSpeed*absSpeed/900),12.5/Math.max(1,absSpeed));
+ const service=!!input.brake||throttle*longitudinal<0;
+ const traction=approach(state.traction??1,sliding?.05:1,dt*(sliding?7:1.8));
+ const tyreGrip={front:TYRE_GRIP,rear:TYRE_GRIP*traction};
+ const axleDrive=axleDriveForces(config,{throttle:service?0:throttle,handbrake,frontGrip:tyreGrip.front,rearGrip:tyreGrip.rear});
+ const axleBrakes=axleBrakeForces(config,{service,handbrake,sliding});
+ const target=throttle>0?config.maxSpeed/(1+uphill*1.4):throttle<0?-config.maxSpeed*.4/(1+uphill*1.4):0;
+ const driveAcceleration=Math.abs(axleDrive.front+axleDrive.rear),brakeAcceleration=axleBrakes.front+axleBrakes.rear;
+ if(!service&&driveAcceleration)longitudinal=approach(longitudinal,target,dt*driveAcceleration);
+ if(brakeAcceleration)longitudinal=approach(longitudinal,0,dt*brakeAcceleration);
+ else if(!throttle)longitudinal=approach(longitudinal,0,dt*5);
+ if(!service&&!handbrake&&!state.airborne)longitudinal+=9.8*Math.sin(ground.pitch)*dt;
+ const absSpeed=Math.abs(longitudinal),gripYaw=Math.min(config.turnRate*TYRE_GRIP/(1+absSpeed*absSpeed/900),12.5*TYRE_GRIP/Math.max(1,absSpeed));
  const targetYaw=steer*gripYaw*(sliding?1.85:1)*Math.min(1,absSpeed/4)*Math.sign(longitudinal);
  const yawRate=approach(state.yawRate??0,targetYaw,dt*(sliding?3.5:5.5)),heading=state.heading+yawRate*dt;
  vx=f.x*longitudinal+r.x*lateral;vz=f.z*longitudinal+r.z*lateral;
  const nf={x:Math.sin(heading),z:Math.cos(heading)},nr={x:Math.cos(heading),z:-Math.sin(heading)};
  let forward=vx*nf.x+vz*nf.z,side=vx*nr.x+vz*nr.z;
  // The front tyres still guide the car. Rear grip returns progressively after release.
- const traction=approach(state.traction??1,sliding?.05:1,dt*(sliding?7:1.8));
- side*=Math.exp(-(state.airborne?.15:.65+14*traction)*dt);
- if(input.brake){side=approach(side,0,config.brake*dt);}
+ // Steering/front contact stays available when only the rear tyres are locked.
+ side*=Math.exp(-(state.airborne?.15:.65*tyreGrip.front+14*tyreGrip.rear)*dt);
+ if(service){side=approach(side,0,(axleBrakes.front+axleBrakes.rear)*dt);}
  if(Math.abs(forward)<.05&&!throttle)forward=0;if(Math.abs(side)<.01)side=0;
  vx=nf.x*forward+nr.x*side;vz=nf.z*forward+nr.z*side;
  const delta={x:vx*dt,z:vz*dt};
@@ -55,9 +74,12 @@ function driveStep(state,input,dt,colliders,environment){
  if(blocked){forward=0;vx=0;vz=0;side=0;}
  else if(desired>.002&&actual<desired*.98){vx=(moved.x-state.x)/dt;vz=(moved.z-state.z)/dt;forward=vx*nf.x+vz*nf.z;side=vx*nr.x+vz*nr.z;}
  const slipAngle=Math.atan2(side,Math.max(.1,Math.abs(forward)));
- const braking=!!input.brake&&!input.park||handbrake||(throttle*forward<-.3),speed=Math.hypot(vx,vz);
- const skidIntensity=state.airborne||blocked?0:Math.min(1,Math.max(speed>8&&Math.abs(slipAngle)>.085?Math.abs(side)/3:0,handbrake&&speed>3?.75:0,braking&&speed>8&&deceleration>=8?.6:0));
- const next={...state,...moved,heading,speed:forward,vx,vz,yawRate,blocked,traction,handbrake,braking,reversing:forward<-.2,slipAngle,skidIntensity,drifting:speed>8&&Math.abs(slipAngle)>.1};
+ const braking=service&&!input.park||handbrake,speed=Math.hypot(vx,vz);
+ const lateralSkid=speed>8&&Math.abs(slipAngle)>.085?Math.min(1,Math.abs(side)/3):0;
+ const serviceSkid=service&&!input.park&&speed>8?.6:0,contact=!state.airborne&&!blocked;
+ const skidAxles={front:contact?Math.max(lateralSkid,serviceSkid):0,rear:contact?Math.max(lateralSkid,serviceSkid,handbrake&&speed>3?.75:0):0};
+ const skidIntensity=Math.max(skidAxles.front,skidAxles.rear);
+ const next={...state,...moved,heading,speed:forward,vx,vz,yawRate,blocked,traction,tyreGrip,axleBrakes,axleDrive,handbrake,braking,reversing:forward<-.2,slipAngle,skidAxles,skidIntensity,drifting:speed>8&&Math.abs(slipAngle)>.1};
  return {...next,...stepChassis(next,sampleWheelGround(next,config,heightAt),dt,config,{acceleration:(forward-state.speed)/dt,turnRate:yawRate})};
 }
 /** Find dry, unobstructed ground beside the stopped vehicle, never inside a wall or water. */
@@ -180,7 +202,8 @@ export function createVehicle(parent, kind, origin, heading = 0, environment={})
         }
         pivot.position.y=suspension;
       });
-      wheels.forEach(w => w.rotation.x += state.speed * dt / contactRadius); frontWheels.forEach(w => w.rotation.y = steering * .35);skidMarks.update(state,VEHICLES[kind],dt);
+      // A locked rear wheel leaves a ribbon while the free front wheel keeps rolling.
+      wheels.forEach(w => {if(!(state.handbrake&&w.parent.position.z<0))w.rotation.x += state.speed * dt / contactRadius;}); frontWheels.forEach(w => w.rotation.y = steering * .35);skidMarks.update(state,VEHICLES[kind],dt);
     },
     collider() { return { kind: 'circle', x: state.x, z: state.z, radius: VEHICLES[kind].radius,minY:root.position.y,maxY:root.position.y+(kind==='motorhome'?4.62:scooter?2.5:3.7), id: 'player-vehicle' }; },
     dispose() { root.removeFromParent();skidMarks.dispose(); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose());Object.values(lampMaterials).forEach(m=>m.dispose());headlight.dispose(); },

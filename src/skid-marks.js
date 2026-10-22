@@ -23,7 +23,7 @@ export function createSkidMarks(parent,{capacity=4096,lifetime=75,heightAt=trave
   const contacts=[];let wheel=0;
   for(const side of config.track?[-1,1]:[0])for(const end of [-1,1]){
    const lx=side*config.track/2,lz=end*config.wheelBase/2,x=state.x+c*lx+s*lz,z=state.z-s*lx+c*lz,y=heightAt(x,z,state.bodyY),water=surfaceAt(x,z);
-   const point={x,y:y+.065,z},previous=last[wheel++],enabled=active&&(water===null||water<y)&&(end<0||!state.handbrake||state.drifting);
+   const point={x,y:y+.065,z},previous=last[wheel++],intensity=state.skidAxles?.[end<0?'rear':'front']??state.skidIntensity,enabled=active&&intensity>.12&&(water===null||water<y);
    const length=previous?Math.hypot(x-previous.x,z-previous.z):0;
    // Losing contact or teleporting breaks the ribbon instead of drawing across the map.
    if(enabled&&previous&&length>.04&&length<12&&Math.abs(point.y-previous.y)<1.5){
@@ -31,7 +31,7 @@ export function createSkidMarks(parent,{capacity=4096,lifetime=75,heightAt=trave
     for(let j=0;j<steps;j++){
      const vertices=[];
      for(const t of [j/steps,(j+1)/steps]){const px=previous.x+(x-previous.x)*t,pz=previous.z+(z-previous.z)*t,py=heightAt(px+dz,pz-dx,state.bodyY)+.065,qy=heightAt(px-dz,pz+dx,state.bodyY)+.065;vertices.push(px+dz,py,pz-dx,px-dz,qy,pz+dx);}
-     positions.set(vertices,cursor*12);stamps.fill(clock.value,cursor*4,cursor*4+4);strengths.fill(state.skidIntensity,cursor*4,cursor*4+4);
+     positions.set(vertices,cursor*12);stamps.fill(clock.value,cursor*4,cursor*4+4);strengths.fill(intensity,cursor*4,cursor*4+4);
      cursor=(cursor+1)%capacity;count=Math.min(capacity,count+1);emitted++;
     }
    }

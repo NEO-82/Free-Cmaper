@@ -35,7 +35,7 @@ export function constrainTunnelCamera(camera,focus){
 }
 export function createRoadView(parent,groundMesh){
  const root=new THREE.Group();root.name='Asphalt roads and illuminated tunnels';parent.add(root);
- const canvas=document.createElement('canvas');canvas.width=canvas.height=128;const c=canvas.getContext('2d');c.fillStyle='#50585a';c.fillRect(0,0,128,128);
+ const canvas=document.createElement('canvas');canvas.width=canvas.height=128;const c=canvas.getContext('2d');c.fillStyle='#60686a';c.fillRect(0,0,128,128);
  let seed=61;for(let i=0;i<2500;i++){seed=seed*16807%2147483647;const x=seed%128;seed=seed*16807%2147483647;c.fillStyle=i%2?'#ffffff0d':'#00000018';c.fillRect(x,seed%128,1,1);}
  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.anisotropy=4;
  const asphalt=new THREE.MeshStandardMaterial({color:'#afb7b9',map:texture,roughness:.96,side:THREE.DoubleSide});
