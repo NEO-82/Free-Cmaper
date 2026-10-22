@@ -1,3 +1,4 @@
+import {drivingLookTarget,followDrivingCamera} from './driving-camera.js';
 import { createMotorhomeInterior, INTERIOR_CHOICES, normalizeInterior, motorhomeBoarding } from './motorhome.js';
 import * as THREE from 'three';
 import { pathSurfaceHeight } from './paths.js';
@@ -32,6 +33,7 @@ const t = key => translate(key, options.language);
 let season = 0, mode = 'sedan', running = false, paused = false, elapsed = 0, money = 180000;
 let camp = null, clean = false, protectedCamp = false, danger = false, campCount = 0;
 let backpackOpen = false, optionsOpen = false, posture = 'stand', jumpHeight = 0, jumpVelocity = 0;
+let drivingLookIdle=0,drivingLookAt=0;
 let target = null, yaw = 0, pitch = 0.32, dist = 9.5, weather = 'clear', weatherTick = -1, lastEncounter = 0;
 let inventory = new Map();
 const visited = new Set(), keys = new Set();
@@ -379,7 +381,7 @@ addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', clearMovement);
 document.addEventListener('visibilitychange', () => { previous = performance.now(); clearMovement(); renderHUD(); });
 document.addEventListener('pointerlockchange', () => { clearMovement(); if (!document.pointerLockElement && running && !paused && !backpackOpen && !optionsOpen && !shopOpen) setPaused(true); });
-function look(dx, dy) { if (advancing()) ({ yaw, pitch } = lookAngles(yaw, pitch, dx, dy, options)); }
+function look(dx, dy) { if (advancing()) { ({ yaw, pitch } = lookAngles(yaw, pitch, dx, dy, options)); if(driving&&(dx||dy)){drivingLookIdle=0;drivingLookAt=performance.now();} } }
 document.addEventListener('mousemove', e => { if (document.pointerLockElement === renderer.domElement) look(e.movementX, e.movementY); });
 let touchPosition = null, mouseDragging = false;
 renderer.domElement.addEventListener('pointerdown', e => {
@@ -531,7 +533,7 @@ function interact() {
 }
 
 function enterVehicle(){
-  if(!vehicle||cameraMode!=='outdoor'||inWater())return;driving=true;posture='stand';jumpHeight=jumpVelocity=diveDepth=0;activeTool=null;clearMovement();camper.backpack.visible=false;yaw=vehicle.state.heading-Math.PI;audio.effect('door');toast('driveHint');syncMenus();renderHUD();
+  if(!vehicle||cameraMode!=='outdoor'||inWater())return;driving=true;drivingLookIdle=0;drivingLookAt=performance.now();posture='stand';jumpHeight=jumpVelocity=diveDepth=0;activeTool=null;clearMovement();camper.backpack.visible=false;yaw=vehicle.state.heading-Math.PI;audio.effect('door');toast('driveHint');syncMenus();renderHUD();
 }
 function exitVehicle(){
   if(!vehicle)return;
@@ -704,6 +706,7 @@ function animate(now) {
   const dt = Math.min(realSeconds, 0.1); previous = now;
   if(rvInside){renderRV(dt,realSeconds);return;}
   if(advancing())stepGame(dt,now,realSeconds);
+  if(driving&&vehicle&&advancing()){const view=followDrivingCamera({yaw,pitch,idle:drivingLookIdle},drivingLookTarget(vehicle.state),Math.min(realSeconds,Math.max(0,(now-drivingLookAt)/1000)));yaw=view.yaw;pitch=view.pitch;drivingLookIdle=view.idle;}
   if (!running) { menuCamper.updateFace(now/1000);renderer.render(titleScene, titleCamera); return; }
   // A paused view is static. Redraw only for a menu action, option or resize.
   if (!advancing() && !sceneDirty) return;

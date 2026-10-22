@@ -16,8 +16,8 @@ export const TYRE_GRIP=1.2;
 export const STEERING_RESPONSE=1.35;
 /** Service braking acts on both axles; a handbrake adds no front-axle force. */
 export function axleBrakeForces(config,{service=false,handbrake=false,sliding=false}={}){
- const front=service?config.brake*2.5/2:0;
- const rear=Math.max(front,handbrake?(sliding?11:config.brake):0);
+ const front=service?config.brake*2.125/2:0;
+ const rear=Math.max(front,handbrake?(sliding?9.35:config.brake*.85):0);
  return {front,rear};
 }
 /** Equal front/rear drive in AWD, all drive at the rear in RWD; locked tyres transmit no drive. */
