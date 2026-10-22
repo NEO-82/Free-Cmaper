@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {ROADS,TUNNELS,ROAD_JUNCTIONS,roadSurfaceAt,tunnelAt,tunnelCeilingAt} from './road-network.js';
-import {WORLD} from './landscape-layout.js';
+import {WORLD,BRIDGE} from './landscape-layout.js';
 
 export function tunnelWallColliders(tunnels=TUNNELS){
  const walls=[];
@@ -43,7 +43,8 @@ export function createRoadView(parent,groundMesh){
  const yellow=new THREE.MeshStandardMaterial({color:'#f0c659',roughness:.8,side:THREE.DoubleSide});
  const white=new THREE.MeshStandardMaterial({color:'#f1ead6',roughness:.85,side:THREE.DoubleSide});
  const roadMeshes=[];
- for(const road of ROADS){roadMeshes.push(strip(parent,road.track,-11,11,shoulder,0));roadMeshes.push(strip(parent,road.track,-9,9,asphalt));
+ const dirt=new THREE.MeshStandardMaterial({color:'#c7a77a',roughness:1,side:THREE.DoubleSide});
+ for(const road of ROADS){if(road.kind==='village'){roadMeshes.push(strip(parent,road.track,-road.width/2,road.width/2,shoulder));roadMeshes.push(strip(parent,road.track,-road.pavementWidth/2,road.pavementWidth/2,dirt,.045));continue;}roadMeshes.push(strip(parent,road.track,-11,11,shoulder,0));roadMeshes.push(strip(parent,road.track,-9,9,asphalt));
   const lineTracks=[];let line=[];
   for(const p of road.track){if(ROAD_JUNCTIONS.some(j=>Math.hypot(p.x-j.x,p.z-j.z)<14)){if(line.length>1)lineTracks.push(line);line=[];}else line.push(p);}if(line.length>1)lineTracks.push(line);
   for(const track of lineTracks){strip(root,track,-.22,-.08,yellow,.04);strip(root,track,.08,.22,yellow,.04);strip(root,track,-8.6,-8.43,white,.04);strip(root,track,8.43,8.6,white,.04);}
@@ -83,7 +84,8 @@ export function createRoadView(parent,groundMesh){
  instances(new THREE.BoxGeometry(2.4,.12,.5),led,fixtureMatrices);instances(new THREE.BoxGeometry(.12,.22,.8),yellow,reflectors);
  // Cut only the portal opening out of the landscape; the mountain roof stays intact.
  const size=2048,data=new Uint8Array(size*size*4),width=WORLD.maxX-WORLD.minX,depth=WORLD.maxZ-WORLD.minZ;
- const openingAt=(x,y,z)=>portals.some(p=>{const dx=x-p.x,dz=z-p.z,lateral=Math.cos(p.heading)*dx-Math.sin(p.heading)*dz,longitudinal=Math.sin(p.heading)*dx+Math.cos(p.heading)*dz;return Math.abs(lateral)<10.9&&longitudinal>-50&&longitudinal<75&&y<p.y+10.7;});
+ const bridgeOpening=(x,z)=>x>BRIDGE.startX&&x<BRIDGE.endX&&Math.abs(z-BRIDGE.z)<BRIDGE.width/2;
+ const openingAt=(x,y,z)=>bridgeOpening(x,z)||portals.some(p=>{const dx=x-p.x,dz=z-p.z,lateral=Math.cos(p.heading)*dx-Math.sin(p.heading)*dz,longitudinal=Math.sin(p.heading)*dx+Math.cos(p.heading)*dz;return Math.abs(lateral)<10.9&&longitudinal>-50&&longitudinal<75&&y<p.y+10.7;});
  for(const p of portals){const x0=Math.max(0,Math.floor((p.x-80-WORLD.minX)/width*size)),x1=Math.min(size-1,Math.ceil((p.x+80-WORLD.minX)/width*size)),z0=Math.max(0,Math.floor((p.z-80-WORLD.minZ)/depth*size)),z1=Math.min(size-1,Math.ceil((p.z+80-WORLD.minZ)/depth*size));const h=Math.round((p.y+10.7)/512*65535);
   for(let gz=z0;gz<=z1;gz++)for(let gx=x0;gx<=x1;gx++){const x=WORLD.minX+(gx+.5)/size*width,z=WORLD.minZ+(gz+.5)/size*depth;if(openingAt(x,p.y,z)){const k=(gz*size+gx)*4;data[k]=Math.floor(h/256);data[k+1]=h%256;data[k+2]=255;data[k+3]=255;}}
  }
@@ -91,8 +93,9 @@ export function createRoadView(parent,groundMesh){
  const material=groundMesh.material,previous=material.onBeforeCompile,key=material.customProgramCacheKey();
  material.onBeforeCompile=function(shader,...args){previous.call(this,shader,...args);shader.uniforms.portalMask={value:mask};shader.uniforms.portalBounds={value:new THREE.Vector4(WORLD.minX,WORLD.minZ,width,depth)};
   shader.vertexShader='varying vec3 vTunnelWorld;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nvTunnelWorld=(modelMatrix*vec4(transformed,1.)).xyz;');
-  shader.fragmentShader='uniform sampler2D portalMask;uniform vec4 portalBounds;varying vec3 vTunnelWorld;\n'+shader.fragmentShader.replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\nvec4 portal=texture2D(portalMask,(vTunnelWorld.xz-portalBounds.xy)/portalBounds.zw);float portalHeight=(portal.r*65280.+portal.g*255.)/65535.*512.;if(portal.b>.5&&vTunnelWorld.y<portalHeight)discard;');
- };material.customProgramCacheKey=()=>key+'-tunnel-portals-v1';material.needsUpdate=true;
+  shader.uniforms.bridgeFootprint={value:new THREE.Vector4(BRIDGE.startX,BRIDGE.endX,BRIDGE.z,BRIDGE.width/2)};
+  shader.fragmentShader='uniform vec4 bridgeFootprint;uniform sampler2D portalMask;uniform vec4 portalBounds;varying vec3 vTunnelWorld;\n'+shader.fragmentShader.replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\nif(vTunnelWorld.x>bridgeFootprint.x&&vTunnelWorld.x<bridgeFootprint.y&&abs(vTunnelWorld.z-bridgeFootprint.z)<bridgeFootprint.w)discard;\nvec4 portal=texture2D(portalMask,(vTunnelWorld.xz-portalBounds.xy)/portalBounds.zw);float portalHeight=(portal.r*65280.+portal.g*255.)/65535.*512.;if(portal.b>.5&&vTunnelWorld.y<portalHeight)discard;');
+ };material.customProgramCacheKey=()=>key+'-tunnel-portals-bridge-v2';material.needsUpdate=true;
  const original=groundMesh.raycast;groundMesh.raycast=function(ray,hits){const found=[];original.call(this,ray,found);for(const hit of found)if(!openingAt(hit.point.x,hit.point.y,hit.point.z))hits.push(hit);};
  const lights=Array.from({length:6},()=>{const light=new THREE.PointLight('#fff1cf',0,48,1.5);root.add(light);return light;});let active=null;
  function update(point){active=tunnelAt(point.x,point.z,point.y);const near=fixtures.filter(p=>Math.hypot(p.x-point.x,p.z-point.z)<70).sort((a,b)=>(a.x-point.x)**2+(a.z-point.z)**2-(b.x-point.x)**2-(b.z-point.z)**2);

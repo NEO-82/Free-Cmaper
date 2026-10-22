@@ -1,16 +1,23 @@
 import * as THREE from 'three';
 import { pathSurfaceHeight } from './paths.js';
 import { sampleWheelGround, stepChassis } from './vehicle-physics.js';
+import { createSkidMarks } from './skid-marks.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { resolveMovement, travelHeight, terrainHeight, canOccupy, isWater } from './terrain.js';
+import { resolveMovement, travelHeight, terrainHeight, canOccupy, isWater, waterSurfaceAt } from './terrain.js';
 
 export const VEHICLES = Object.freeze({
-  motorhome: Object.freeze({ maxSpeed: 48, acceleration: 12, brake: 28, turnRate: 1.05, radius: 4.62, wheelRadius: .715, length: 8.8, wheelBase: 5.61, track: 3.41, travel: .44 }),
-  sedan: Object.freeze({ maxSpeed: 64, acceleration: 18, brake: 30, turnRate: 1.45, radius: 2.8, wheelRadius: .55, length: 5.8, wheelBase:3.7, track:2.56, travel:.3 }),
-  suv: Object.freeze({ maxSpeed: 56, acceleration: 16, brake: 30, turnRate: 1.3, radius: 3, wheelRadius: .67, length: 6.2, wheelBase:4, track:2.74, travel:.44 }),
-  scooter: Object.freeze({ maxSpeed: 40, acceleration: 14, brake: 24, turnRate: 1.9, radius: 1.35, wheelRadius: .40, length: 2.8, wheelBase:1.84, track:0, travel:.20 }),
+  motorhome: Object.freeze({ maxSpeed: 72, maxWadeDepth:0.65, acceleration: 12, brake: 28, turnRate: 1.05, radius: 4.62, wheelRadius: .715, length: 8.8, wheelBase: 5.61, track: 3.41, travel: .44 }),
+  sedan: Object.freeze({ maxSpeed: 96, maxWadeDepth:0.5, acceleration: 18, brake: 30, turnRate: 1.45, radius: 2.8, wheelRadius: .55, length: 5.8, wheelBase:3.7, track:2.56, travel:.3 }),
+  suv: Object.freeze({ maxSpeed: 84, maxWadeDepth:0.7, acceleration: 16, brake: 30, turnRate: 1.3, radius: 3, wheelRadius: .67, length: 6.2, wheelBase:4, track:2.74, travel:.44 }),
+  scooter: Object.freeze({ maxSpeed: 60, maxWadeDepth:0.3, acceleration: 14, brake: 24, turnRate: 1.9, radius: 1.35, wheelRadius: .40, length: 2.8, wheelBase:1.84, track:0, travel:.20 }),
 });
 const approach = (v, target, step) => v < target ? Math.min(target, v + step) : Math.max(target, v - step);
+/** Check tyres and centre, so shallow water is accessible without submerging the vehicle. */
+export function vehicleWaterAllowed(state,config,heightAt=terrainHeight,surfaceAt=waterSurfaceAt){
+ return [{x:state.x,z:state.z},...sampleWheelGround(state,config,heightAt).wheels].every(p=>{
+  const surface=surfaceAt(p.x,p.z);return surface===null||surface-heightAt(p.x,p.z)<=config.maxWadeDepth;
+ });
+}
 /** Rear-wheel handbrake releases lateral grip while momentum continues in world space. */
 export function stepDrive(previous,input,dt,colliders=[],environment={}){
  if(!VEHICLES[previous.kind]||!Number.isFinite(dt)||dt<=0)return {...previous};
@@ -43,12 +50,14 @@ function driveStep(state,input,dt,colliders,environment){
  if(Math.abs(forward)<.05&&!throttle)forward=0;if(Math.abs(side)<.01)side=0;
  vx=nf.x*forward+nr.x*side;vz=nf.z*forward+nr.z*side;
  const delta={x:vx*dt,z:vz*dt};
- const moved=resolveMovement(state,delta,colliders,config.radius,{vehicle:true,heightAt,allowWater:state.airborne||(state.bodyY??ground.height)-heightAt(state.x+delta.x,state.z+delta.z)>1.5,footY:state.bodyY??ground.height,bodyHeight:state.kind==='motorhome'?4.6:3.7});
- const desired=Math.hypot(delta.x,delta.z),actual=Math.hypot(moved.x-state.x,moved.z-state.z),blocked=desired>.002&&actual<desired*.45;
+ const moved=resolveMovement(state,delta,colliders,config.radius,{vehicle:true,heightAt,allowWater:true,waterAllowedAt:(x,z)=>vehicleWaterAllowed({...state,x,z,heading},config,heightAt,environment.waterSurfaceAt??waterSurfaceAt),footY:state.bodyY??ground.height,bodyHeight:state.kind==='motorhome'?4.6:3.7});
+ const desired=Math.hypot(delta.x,delta.z),actual=Math.hypot(moved.x-state.x,moved.z-state.z),blocked=desired>1e-7&&actual<desired*.45;
  if(blocked){forward=0;vx=0;vz=0;side=0;}
  else if(desired>.002&&actual<desired*.98){vx=(moved.x-state.x)/dt;vz=(moved.z-state.z)/dt;forward=vx*nf.x+vz*nf.z;side=vx*nr.x+vz*nr.z;}
  const slipAngle=Math.atan2(side,Math.max(.1,Math.abs(forward)));
- const next={...state,...moved,heading,speed:forward,vx,vz,yawRate,blocked,traction,handbrake,braking:!!input.brake&&!input.park||handbrake||(throttle*forward<-.3),reversing:forward<-.2,slipAngle,drifting:Math.hypot(vx,vz)>8&&Math.abs(slipAngle)>.1};
+ const braking=!!input.brake&&!input.park||handbrake||(throttle*forward<-.3),speed=Math.hypot(vx,vz);
+ const skidIntensity=state.airborne||blocked?0:Math.min(1,Math.max(speed>8&&Math.abs(slipAngle)>.085?Math.abs(side)/3:0,handbrake&&speed>3?.75:0,braking&&speed>8&&deceleration>=8?.6:0));
+ const next={...state,...moved,heading,speed:forward,vx,vz,yawRate,blocked,traction,handbrake,braking,reversing:forward<-.2,slipAngle,skidIntensity,drifting:speed>8&&Math.abs(slipAngle)>.1};
  return {...next,...stepChassis(next,sampleWheelGround(next,config,heightAt),dt,config,{acceleration:(forward-state.speed)/dt,turnRate:yawRate})};
 }
 /** Find dry, unobstructed ground beside the stopped vehicle, never inside a wall or water. */
@@ -155,7 +164,8 @@ export function createVehicle(parent, kind, origin, heading = 0, environment={})
   }
   const contactRadius=VEHICLES[kind].wheelRadius;
   let state = { kind, x: origin.x, z: origin.z, heading, speed: 0, blocked: false };
-  const model = { root, wheels, frontWheels, lamps, headlight, setLights, get lights(){return {...lightState};}, config: VEHICLES[kind], get state() { return state; },
+  const skidMarks=createSkidMarks(parent,{heightAt:environment.heightAt??((x,z,y)=>travelHeight(x,z,y))});
+  const model = { root, wheels, frontWheels, lamps, headlight, skidMarks, setLights, get lights(){return {...lightState};}, config: VEHICLES[kind], get state() { return state; },
     update(next, dt = 0, steering = 0) {
       state = { ...next }; const ground=state.ground??sampleWheelGround(state,VEHICLES[kind],environment.heightAt??((x,z)=>travelHeight(x,z,state.bodyY??terrainHeight(state.x,state.z))));
       if(!Number.isFinite(state.bodyY))Object.assign(state,stepChassis(state,ground,0,VEHICLES[kind]));
@@ -170,10 +180,10 @@ export function createVehicle(parent, kind, origin, heading = 0, environment={})
         }
         pivot.position.y=suspension;
       });
-      wheels.forEach(w => w.rotation.x += state.speed * dt / contactRadius); frontWheels.forEach(w => w.rotation.y = steering * .35);
+      wheels.forEach(w => w.rotation.x += state.speed * dt / contactRadius); frontWheels.forEach(w => w.rotation.y = steering * .35);skidMarks.update(state,VEHICLES[kind],dt);
     },
     collider() { return { kind: 'circle', x: state.x, z: state.z, radius: VEHICLES[kind].radius,minY:root.position.y,maxY:root.position.y+(kind==='motorhome'?4.62:scooter?2.5:3.7), id: 'player-vehicle' }; },
-    dispose() { root.removeFromParent(); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose());Object.values(lampMaterials).forEach(m=>m.dispose());headlight.dispose(); },
+    dispose() { root.removeFromParent();skidMarks.dispose(); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose());Object.values(lampMaterials).forEach(m=>m.dispose());headlight.dispose(); },
   };
   model.update(state);setLights();return model;
 }

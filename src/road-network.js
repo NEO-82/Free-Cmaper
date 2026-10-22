@@ -1,4 +1,4 @@
-import {ARRIVAL,BRIDGE,SUMMITS,VILLAGE_SITES,referencePoint,smoothPath,naturalLandscapeHeight,clamp,smooth} from './landscape-layout.js';
+import {ARRIVAL,BRIDGE,SUMMITS,VILLAGE_SITES,villagePoint,referencePoint,smoothPath,naturalLandscapeHeight,clamp,smooth} from './landscape-layout.js';
 export const ROAD_WIDTH=22,PAVEMENT_WIDTH=18,TRAIL_WIDTH=22,TRAIL_SAMPLES=1200;
 const zigzag=[[400,520],[420,460],[360,420],[-340,380],[-380,320],[-320,280],[280,240],[320,180],[260,140],[-220,110],[-250,65],[-190,20],[-120,-30],[-150,-110],[-70,-140],[40,-100],[65,-60],[0,0]];
 const scenic=[[-440,470],[-380,430],[-300,400],[-350,280],[-400,180],[-360,100],[-250,120],[-100,240],[120,300],[300,240],[360,120],[300,20],[190,-40],[150,-160],[60,-250],[-80,-260],[-170,-170],[-150,-60],[-60,-20],[0,0]];
@@ -7,12 +7,12 @@ function atPath(path,t){const distance=clamp(t,0,1)*path.length;let lo=0,hi=path
 const summitPaths=SUMMITS.map((m,i)=>arcPath((i?scenic:zigzag).map(([x,z])=>({x:m.x+x,z:m.z+z}))));
 export function trailPoint(t,index=0){return atPath(summitPaths[index]??summitPaths[0],t);}
 const starts=SUMMITS.map((_,i)=>trailPoint(0,i));
-export const SHOP_SITES=Object.freeze([{id:'parking',x:ARRIVAL.x-15,z:ARRIVAL.z-45},{id:'island-entry',x:BRIDGE.endX+100,z:BRIDGE.z-36},...starts.map((p,i)=>({id:SUMMITS[i].id+'-gate',x:p.x-60,z:p.z+60})),...VILLAGE_SITES.map(v=>({id:v.id+'-shop',x:v.x,z:v.z-60}))].map(Object.freeze));
+export const SHOP_SITES=Object.freeze([{id:'parking',x:ARRIVAL.x-15,z:ARRIVAL.z-45},{id:'island-entry',x:BRIDGE.endX+100,z:BRIDGE.z-36},...starts.map((p,i)=>({id:SUMMITS[i].id+'-gate',x:p.x-60,z:p.z+60})),...VILLAGE_SITES.map(v=>({id:v.id+'-shop',...villagePoint(v,0,-60)}))].map(Object.freeze));
 export const SHOP=SHOP_SITES[0];
 const coastRefs=[[75,320],[65,272],[85,235],[115,206],[160,180],[190,153],[215,112],[253,81],[271,53],[310,49],[352,50],[362,76],[402,87],[439,99],[437,142],[436,181],[444,216],[467,235],[493,240],[501,261],[491,275],[475,277],[459,266],[447,255],[414,275],[402,301],[379,314],[352,331],[326,343],[300,349],[270,353],[234,359],[195,354],[159,352],[127,349],[98,338]];
 const refRoute=points=>points.map(referencePoint);
 const coastControls=refRoute(coastRefs),bridgeJunction=referencePoint([75,320]);
-export const ROAD_NETWORK=Object.freeze([
+const mainNetwork=[
  [ARRIVAL,{x:BRIDGE.startX,z:BRIDGE.z},{x:BRIDGE.endX,z:BRIDGE.z},{x:BRIDGE.endX+110,z:BRIDGE.z},bridgeJunction],
  coastControls,
  refRoute([[65,272],[116,245],[195,216],[278,227],[341,232],[414,275]]),
@@ -22,17 +22,23 @@ export const ROAD_NETWORK=Object.freeze([
  [referencePoint([278,227]),starts[0]],
  [referencePoint([341,232]),starts[1]],
  ...starts.map((p,i)=>[p,{x:SHOP_SITES[i+2].x,z:SHOP_SITES[i+2].z+14}]),
- ...VILLAGE_SITES.map(v=>{const p=coastControls.reduce((a,b)=>Math.hypot(a.x-v.x,a.z-v.z)<Math.hypot(b.x-v.x,b.z-v.z)?a:b);return [p,{x:v.x,z:v.z}];}),
-]);
+];
+const mainPaths=mainNetwork.map((p,i)=>arcPath(p,i===1));
+const accessNetwork=VILLAGE_SITES.map(v=>{
+ const entry=villagePoint(v,0,96),end=villagePoint(v,0,21);
+ const anchor=mainPaths.flatMap(p=>p.points).reduce((a,b)=>Math.hypot(a.x-entry.x,a.z-entry.z)<Math.hypot(b.x-entry.x,b.z-entry.z)?a:b);
+ return [anchor,entry,end];
+});
+export const ROAD_NETWORK=Object.freeze([...mainNetwork,...accessNetwork]);
 const paths=ROAD_NETWORK.map((p,i)=>arcPath(p,i===1));
 export function roadPoint(t,branch=0){return atPath(paths[branch]??paths[0],t);}
 function makeRoad(id,path,{summit=null,closed=false,kind='inland'}={}){
  const count=Math.ceil(path.length/2),track=Array.from({length:count+1},(_,i)=>{const p=atPath(path,i/count),distance=i/count*path.length;
   const y=summit?2.5+(summit.height-2.5)*smooth(0,1,distance/(path.length-32)):id==='gateway'?(p.x>=BRIDGE.startX-60&&p.x<=BRIDGE.endX+60&&Math.abs(p.z-BRIDGE.z)<BRIDGE.width/2?2.5+2*Math.min(smooth(BRIDGE.startX-60,BRIDGE.startX,p.x),1-smooth(BRIDGE.endX,BRIDGE.endX+60,p.x)):2.5):2.5;
   return {...p,y,distance,tunnel:false};});
- return {id,kind,track,length:path.length,width:ROAD_WIDTH,pavementWidth:PAVEMENT_WIDTH,summit,closed};
+ return {id,kind,track,length:path.length,width:kind==='village'?8:ROAD_WIDTH,pavementWidth:kind==='village'?6.5:PAVEMENT_WIDTH,summit,closed};
 }
-export const ROADS=paths.map((p,i)=>makeRoad(i===0?'gateway':i===1?'coastal-loop':'inland-'+i,p,{kind:i===1?'coast':'inland',closed:i===1}));
+export const ROADS=paths.map((p,i)=>makeRoad(i===0?'gateway':i===1?'coastal-loop':'inland-'+i,p,{kind:i>=mainNetwork.length?'village':i===1?'coast':'inland',closed:i===1}));
 export const TRAILS=SUMMITS.map((mountain,index)=>{const road=makeRoad(mountain.id+'-summit',summitPaths[index],{summit:mountain,kind:'summit'});ROADS.push(road);return {...road,mountain,index};});
 // Every low road that crosses solid mountain cover receives a complete tunnel.
 export const TUNNELS=[];

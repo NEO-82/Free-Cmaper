@@ -3,15 +3,17 @@ import {WORLD,BRIDGE,ARRIVAL,SUMMITS,VILLAGE_SITES,LAKE,RIVER_START,riverX,coast
 import {SHOP_SITES,roadSurfaceAt,tunnelAt} from './road-network.js';
 export * from './landscape-layout.js';
 export * from './road-network.js';
+export function waterSurfaceAt(x,z){return !isWater(x,z)?null:Math.hypot((x-LAKE.x)/LAKE.radiusX,(z-LAKE.z)/LAKE.radiusZ)<1?.1:z>=RIVER_START&&Math.abs(x-riverX(z))<5.5?.12:0;}
 export function isWater(x,z){
- const road=roadSurfaceAt(x,z);if(road.distance<11||bridgeSurfaceAt(x,z)!==null)return false;
+ const road=roadSurfaceAt(x,z);if(road.distance<(road.road?.width??22)/2||bridgeSurfaceAt(x,z)!==null)return false;
  if(coastDistance(x,z)<=0)return true;
  return ((x-LAKE.x)/LAKE.radiusX)**2+((z-LAKE.z)/LAKE.radiusZ)**2<1||(z>=RIVER_START&&Math.abs(x-riverX(z))<5.5);
 }
 function editedHeight(x,z,rendered){
  if(!Number.isFinite(x)||!Number.isFinite(z))return 0;
  let h=naturalLandscapeHeight(x,z),road=roadSurfaceAt(x,z);
- if(road.distance<36&&(!rendered||!road.tunnel)){const blend=1-smooth(12,36,road.distance);h=h*(1-blend)+road.height*blend;}
+ const half=(road.road?.width??22)/2,edge=half+1,outer=road.road?.kind==='village'?half+10:36;
+ if(road.distance<outer&&(!rendered||!road.tunnel)){const blend=1-smooth(edge,outer,road.distance);h=h*(1-blend)+road.height*blend;}
  if(Math.abs(x-ARRIVAL.x)<85&&Math.abs(z-ARRIVAL.z)<90)h=2.5;
  for(const v of VILLAGE_SITES){const blend=1-smooth(v.radius,v.radius+18,Math.hypot(x-v.x,z-v.z));h=h*(1-blend)+2.5*blend;}
  for(const shop of SHOP_SITES){const d=Math.hypot(Math.max(Math.abs(x-shop.x)-17,0),Math.max(Math.abs(z-shop.z)-17,0)),blend=1-smooth(0,10,d);h=h*(1-blend)+2.5*blend;}
@@ -24,7 +26,7 @@ export function landscapeHeight(x,z){return campGroundHeight(x,z,editedHeight(x,
 export function landscapeSlope(x,z){return Math.hypot(landscapeHeight(x+.5,z)-landscapeHeight(x-.5,z),landscapeHeight(x,z+.5)-landscapeHeight(x,z-.5));}
 export function travelHeight(x,z,altitude=-Infinity){
  const p=roadSurfaceAt(x,z,{altitude});
- if(p.distance<12&&Number.isFinite(altitude)&&Math.abs(altitude-p.height)<11)return campGroundHeight(x,z,p.height);
+ if(p.distance<(p.road?.width??22)/2+1&&Number.isFinite(altitude)&&Math.abs(altitude-p.height)<11)return campGroundHeight(x,z,p.height);
  return p.tunnel?landscapeHeight(x,z):terrainHeight(x,z);
 }
 export function terrainSlope(x,z) {
@@ -61,7 +63,7 @@ export function resolveMovement(position, delta, colliders = [], radius = 0.55, 
   const steps = Math.max(1, Math.ceil(Math.hypot(delta.x, delta.z) / Math.max(0.15, radius * 0.65)));
   const dx = delta.x / steps, dz = delta.z / steps;
   const heightAt=options.heightAt??terrainHeight;
-  const allowed = (nx,nz) => canOccupy(nx,nz,colliders,radius,options.vehicle?{...options,ignoreSlope:true,footY:position.bodyY??heightAt(nx,nz)}:options) &&
+  const allowed = (nx,nz) => (!options.waterAllowedAt||options.waterAllowedAt(nx,nz)) && canOccupy(nx,nz,colliders,radius,options.vehicle?{...options,ignoreSlope:true,footY:position.bodyY??heightAt(nx,nz)}:options) &&
     (options.vehicle ? heightAt(nx,nz)<=Math.max(heightAt(x,z),position.bodyY??-Infinity)+Math.hypot(nx-x,nz-z)*1.35+.15 : options.ignoreSlope || (options.allowWater && (isWater(nx,nz)||isWater(x,z)||coastDistance(nx,nz)<35||coastDistance(x,z)<35)) || Math.abs(heightAt(nx,nz)-heightAt(x,z)) <= Math.hypot(nx-x,nz-z)*1.35+.035);
   for (let i = 0; i < steps; i++) {
     if (allowed(x + dx, z + dz)) { x += dx; z += dz; }

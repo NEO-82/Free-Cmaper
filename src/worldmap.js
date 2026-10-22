@@ -1,4 +1,4 @@
-import { WORLD, VILLAGE_SITES, SHOP_SITES, MOUNTAINS, LAKE, landscapeHeight as terrainHeight, isDesert, isWater, coastDistance, TRAILS, ROAD_NETWORK, roadPoint, BRIDGE } from './terrain.js';
+import { WORLD, VILLAGE_SITES, SHOP_SITES, MOUNTAINS, LAKE, landscapeHeight as terrainHeight, isDesert, isWater, coastDistance, TRAILS, ROAD_NETWORK, ROADS, roadPoint, BRIDGE } from './terrain.js';
 import { ARRIVAL, arrivalRoadPoint } from './journey.js';
 export function mapPoint(x, z, width, height) { return { x: (x - WORLD.minX) / (WORLD.maxX - WORLD.minX) * width, y: (z - WORLD.minZ) / (WORLD.maxZ - WORLD.minZ) * height }; }
 export function createWorldMap(canvas,{size=1000,labels=true}={}) {
@@ -14,7 +14,7 @@ export function createWorldMap(canvas,{size=1000,labels=true}={}) {
     const c = canvas.getContext('2d'); c.drawImage(base, 0, 0, width, height);
     const point = (x, z) => mapPoint(x, z, width, height);
     c.strokeStyle='#f8e5b4';c.lineWidth=labels?4:1.5;
-    for(let branch=0;branch<ROAD_NETWORK.length;branch++){c.beginPath();for(let i=0;i<=240;i++){const p=roadPoint(i/240,branch),a=point(p.x,p.z);if(!i)c.moveTo(a.x,a.y);else c.lineTo(a.x,a.y);}c.stroke();}
+    for(let branch=0;branch<ROAD_NETWORK.length;branch++){const dirt=ROADS[branch].kind==='village';c.strokeStyle=dirt?'#bc9463':'#f8e5b4';c.lineWidth=dirt?(labels?2:1):(labels?4:1.5);c.beginPath();for(let i=0;i<=240;i++){const p=roadPoint(i/240,branch),a=point(p.x,p.z);if(!i)c.moveTo(a.x,a.y);else c.lineTo(a.x,a.y);}c.stroke();}
     c.strokeStyle='#c69d6a';c.lineWidth=labels?3:1;
     for(const route of TRAILS){c.beginPath();route.track.forEach((p,i)=>{const a=point(p.x,p.z);if(!i)c.moveTo(a.x,a.y);else c.lineTo(a.x,a.y);});c.stroke();}
     function marker(x, z, text, color = '#5b7057', dx = 10, dy = -10) {

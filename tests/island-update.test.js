@@ -20,7 +20,7 @@ test('one stable coastal desert covers about fifteen percent of the world, with 
 });
 test('three villages have dedicated shops and access roads on dry flat sites',()=>{
  assert.equal(VILLAGE_SITES.length,3);assert.equal(SHOP_SITES.length,7);
- for(const v of VILLAGE_SITES){assert.equal(terrainHeight(v.x,v.z),2.5);assert.ok(islandDistance(v.x,v.z)>80);assert.ok(SHOP_SITES.some(s=>s.id===v.id+'-shop'));assert.ok(ROADS.some(r=>Math.hypot(r.track.at(-1).x-v.x,r.track.at(-1).z-v.z)<1));}
+ for(const v of VILLAGE_SITES){assert.equal(terrainHeight(v.x,v.z),2.5);assert.ok(islandDistance(v.x,v.z)>80);assert.ok(SHOP_SITES.some(s=>s.id===v.id+'-shop'));assert.ok(ROADS.some(r=>r.kind==='village'&&Math.hypot(r.track.at(-1).x-v.x,r.track.at(-1).z-v.z)<22));}
 });
 test('tunnels have real walls, ample vehicle clearance, roofs and distinct travel layers',()=>{
  assert.ok(TUNNELS.length>=2);const walls=tunnelWallColliders();assert.ok(walls.length>100);

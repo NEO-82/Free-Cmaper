@@ -7,7 +7,7 @@ export function createGateway(parent){
  function box(name,color,x,y,z,w,h,d){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color));m.name=name;m.position.set(x,y,z);m.receiveShadow=true;m.castShadow=true;group.add(m);return m;}
  box('mainland parking','#b5b8aa',ARRIVAL.x,2.51,ARRIVAL.z,130,.02,130);
  for(let i=-3;i<=3;i++)for(const sign of [-1,1])box('parking stripe','#fff5d1',ARRIVAL.x+i*15,2.535,ARRIVAL.z+sign*25,.15,.025,16);
- box('bridge deck','#d4c6aa',(BRIDGE.startX+BRIDGE.endX)/2,BRIDGE.height-.18,BRIDGE.z,BRIDGE.length,.36,BRIDGE.width);
+ box('bridge deck','#d4c6aa',(BRIDGE.startX+BRIDGE.endX)/2,BRIDGE.height-.26,BRIDGE.z,BRIDGE.length,.36,BRIDGE.width);
  for(const side of [-1,1]){
   box('bridge guardrail','#c0c7bb',(BRIDGE.startX+BRIDGE.endX)/2,BRIDGE.height+.9,BRIDGE.z+side*BRIDGE.width/2,500,.18,.3);
   box('bridge curb','#a8b8ad',(BRIDGE.startX+BRIDGE.endX)/2,BRIDGE.height+.2,BRIDGE.z+side*BRIDGE.width/2,500,.4,.45);
