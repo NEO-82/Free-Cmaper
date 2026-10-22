@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /** Reuse a small tile pool: dense grass follows the player across the entire world. */
-export function createGroundCover(parent, {geometry,material,heightAt,allowed,tileSize=32,radius=4,density=.75}) {
+export function createGroundCover(parent, {geometry,material,heightAt,allowed,tileSize=32,radius=4,density=.225}) {
   const root=new THREE.Group(); root.name='Patchy meadow cover';parent.add(root);
   const capacity=Math.ceil(tileSize*tileSize*density), tiles=new Map(), pool=[];
   const count=(radius*2+1)**2, dummy=new THREE.Object3D();

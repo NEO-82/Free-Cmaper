@@ -13,10 +13,11 @@ export const VEHICLES = Object.freeze({
 });
 const approach = (v, target, step) => v < target ? Math.min(target, v + step) : Math.max(target, v - step);
 export const TYRE_GRIP=1.2;
+export const STEERING_RESPONSE=1.35;
 /** Service braking acts on both axles; a handbrake adds no front-axle force. */
 export function axleBrakeForces(config,{service=false,handbrake=false,sliding=false}={}){
- const front=service?config.brake/2:0;
- const rear=Math.max(front,handbrake?(sliding?5.5:config.brake/2):0);
+ const front=service?config.brake*2.5/2:0;
+ const rear=Math.max(front,handbrake?(sliding?11:config.brake):0);
  return {front,rear};
 }
 /** Equal front/rear drive in AWD, all drive at the rear in RWD; locked tyres transmit no drive. */
@@ -56,9 +57,9 @@ function driveStep(state,input,dt,colliders,environment){
  if(brakeAcceleration)longitudinal=approach(longitudinal,0,dt*brakeAcceleration);
  else if(!throttle)longitudinal=approach(longitudinal,0,dt*5);
  if(!service&&!handbrake&&!state.airborne)longitudinal+=9.8*Math.sin(ground.pitch)*dt;
- const absSpeed=Math.abs(longitudinal),gripYaw=Math.min(config.turnRate*TYRE_GRIP/(1+absSpeed*absSpeed/900),12.5*TYRE_GRIP/Math.max(1,absSpeed));
+ const absSpeed=Math.abs(longitudinal),gripYaw=STEERING_RESPONSE*Math.min(config.turnRate*TYRE_GRIP/(1+absSpeed*absSpeed/900),12.5*TYRE_GRIP/Math.max(1,absSpeed));
  const targetYaw=steer*gripYaw*(sliding?1.85:1)*Math.min(1,absSpeed/4)*Math.sign(longitudinal);
- const yawRate=approach(state.yawRate??0,targetYaw,dt*(sliding?3.5:5.5)),heading=state.heading+yawRate*dt;
+ const yawRate=approach(state.yawRate??0,targetYaw,dt*(sliding?3.5:5.5*STEERING_RESPONSE)),heading=state.heading+yawRate*dt;
  vx=f.x*longitudinal+r.x*lateral;vz=f.z*longitudinal+r.z*lateral;
  const nf={x:Math.sin(heading),z:Math.cos(heading)},nr={x:Math.cos(heading),z:-Math.sin(heading)};
  let forward=vx*nf.x+vz*nf.z,side=vx*nr.x+vz*nr.z;
@@ -77,7 +78,7 @@ function driveStep(state,input,dt,colliders,environment){
  const braking=service&&!input.park||handbrake,speed=Math.hypot(vx,vz);
  const lateralSkid=speed>8&&Math.abs(slipAngle)>.085?Math.min(1,Math.abs(side)/3):0;
  const serviceSkid=service&&!input.park&&speed>8?.6:0,contact=!state.airborne&&!blocked;
- const skidAxles={front:contact?Math.max(lateralSkid,serviceSkid):0,rear:contact?Math.max(lateralSkid,serviceSkid,handbrake&&speed>3?.75:0):0};
+ const skidAxles={front:contact&&!handbrake?Math.max(lateralSkid,serviceSkid):0,rear:contact?Math.max(lateralSkid,serviceSkid,handbrake&&speed>3?.75:0):0};
  const skidIntensity=Math.max(skidAxles.front,skidAxles.rear);
  const next={...state,...moved,heading,speed:forward,vx,vz,yawRate,blocked,traction,tyreGrip,axleBrakes,axleDrive,handbrake,braking,reversing:forward<-.2,slipAngle,skidAxles,skidIntensity,drifting:speed>8&&Math.abs(slipAngle)>.1};
  return {...next,...stepChassis(next,sampleWheelGround(next,config,heightAt),dt,config,{acceleration:(forward-state.speed)/dt,turnRate:yawRate})};

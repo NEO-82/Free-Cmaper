@@ -80,3 +80,17 @@ export function tunnelAt(x,z,altitude=-Infinity){const p=roadSurfaceAt(x,z,{alti
 export function tunnelCeilingAt(x,z,altitude=-Infinity){const p=tunnelAt(x,z,altitude);return p?p.height+5.8+4.8*Math.sqrt(Math.max(0,1-(p.distance/11.2)**2)):Infinity;}
 const counts=new Map();for(const route of ROAD_NETWORK)for(const p of route){const key=`${p.x.toFixed(1)}:${p.z.toFixed(1)}`;const row=counts.get(key)??{...p,count:0};row.count++;counts.set(key,row);}
 export const ROAD_JUNCTIONS=[...counts.values()].filter(p=>p.count>1);
+
+/** Lower the rendered terrain beneath every exposed road, including crossings.
+ * Six metres of margin cover a four-metre terrain cell diagonal. Tunnel roofs stay intact. */
+export function roadUnderlayLimit(x,z,height){
+ for(const s of buckets.get(`${Math.floor(x/CELL)}:${Math.floor(z/CELL)}`)??[]){
+  if(s.tunnel)continue;
+  const {a,b}=s,dx=b.x-a.x,dz=b.z-a.z,t=clamp(((x-a.x)*dx+(z-a.z)*dz)/(dx*dx+dz*dz||1),0,1);
+  const distance=Math.hypot(x-a.x-t*dx,z-a.z-t*dz),edge=s.road.width/2+6;
+  if(distance>edge+10)continue;
+  const blend=clamp((edge+10-distance)/10,0,1),ceiling=a.y+t*(b.y-a.y)-1.5;
+  if(height>ceiling)height+=(ceiling-height)*blend;
+ }
+ return height;
+}

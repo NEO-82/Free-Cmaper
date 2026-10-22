@@ -75,7 +75,7 @@ test('higher tyre authority turns decisively at speed, caps lateral load and set
   let state={kind,x:0,z:0,heading:0,speed:30};
   for(let i=0;i<60;i++){
    state=stepDrive({...state,x:0,z:0},{forward:true,left:true},1/60,[],{heightAt:()=>0});
-   assert.ok(Math.abs(state.yawRate*state.speed)<=12.5*TYRE_GRIP+1e-9);
+   assert.ok(Math.abs(state.yawRate*state.speed)<=12.5*TYRE_GRIP*1.35+1e-9);
   }
   assert.ok(state.heading>.25,`${kind} should respond at road speed`);
   for(let i=0;i<20;i++)state=stepDrive({...state,x:0,z:0},{forward:true},1/60,[],{heightAt:()=>0});

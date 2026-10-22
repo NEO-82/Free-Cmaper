@@ -102,8 +102,8 @@ export function createWorld(scene) {
   groundMap.repeat.set(width / 12, depth / 12); barkMap.repeat.set(1, 2);
   const groundMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, map: groundMap });
   // Concentrate samples on the detailed central mountain; distant land uses a coarse grid.
-  function axis(min,max,fineMin,fineMax){ const values=[min];let x=min;while(x<max){x=Math.min(max,x+(x>=fineMin&&x<fineMax?4:16));values.push(x);}return values; }
-  const xs=axis(WORLD.minX,WORLD.maxX,-720,1370), zs=axis(WORLD.minZ,WORLD.maxZ,-1230,860);
+  function axis(min,max){ const values=[min];let x=min;while(x<max){x=Math.min(max,x+4);values.push(x);}return values; }
+  const xs=axis(WORLD.minX,WORLD.maxX), zs=axis(WORLD.minZ,WORLD.maxZ);
   const terrain = new THREE.PlaneGeometry(width,depth,xs.length-1,zs.length-1);terrain.rotateX(-Math.PI/2);
   const vertices=terrain.attributes.position,uvs=terrain.attributes.uv,colors=new Float32Array(vertices.count*3);
   for(let i=0;i<vertices.count;i++){
