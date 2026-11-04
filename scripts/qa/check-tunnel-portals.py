@@ -19,7 +19,7 @@ with sync_playwright() as p:
    const p=t.track[side?t.track.length-1:0],near=t.track[side?t.track.length-2:1],len=Math.hypot(near.x-p.x,near.z-p.z),dx=(near.x-p.x)/len,dz=(near.z-p.z)/len;portals++;
    for(const along of [-48,-30,-12,0,15,40,70])for(const across of [-21,-18,-14,-11,0,11,14,18,21]){
     const x=p.x+dx*along+dz*across,z=p.z+dz*along-dx*across,ceiling=repair.ceilingAt(x,z),raw=world.renderedTerrainHeight(x,z);if(!Number.isFinite(ceiling)||raw<=0||raw>=ceiling)continue;samples++;
-    if(raw<=ceiling-11.32){preserved++;if(world.roadView.groundOpeningAt(x,raw,z))failures.push({t:t.id,side,x,z,reason:'floor removed'});continue;}
+    if(raw<=(repair.roadFloor??ceiling-11.3)-.02){preserved++;if(world.roadView.groundOpeningAt(x,raw,z))failures.push({t:t.id,side,x,z,reason:'floor removed'});continue;}
     removed++;origin.set(x,ceiling+.1,z);ray.set(origin,down);ray.near=0;ray.far=ceiling;
     const hit=ray.intersectObjects(floors,false).find(h=>h.point.y>.2&&h.point.y<ceiling);if(hit)supported++;else failures.push({t:t.id,side,x,z,raw,ceiling,reason:'sea hole'});
    }

@@ -1,3 +1,19 @@
+# 최신 완료 — 2026-11-04 터널 산 접합부·다리·주민 운전 AI
+
+최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip
+
+- 현재 진입점은 src/current-game.js입니다. 이전 src/main.js로 되돌리지 마세요. 이전 호수·폭포·헬기·129.6648㎢ 맵을 유지합니다.
+- src/tunnel-mountain-seal.js: 실제 아치 높이에 맞춘 절개, 입구 평면 밖으로 뻗는 절개 방지, 외부 암석 셸과 고리 모양 입구 마감. 터널10곳·입구20곳 전체 적용. 차도는 막지 않습니다.
+- src/tunnel-portal-ground.js: 바닥 높이2.5m를 명시적으로 전달하며 GPU 절개 기준2.48m와 맞춥니다. 낮은 바닥과 받침 바닥 보존.
+- 시작500m 다리 양옆80m의 인공 모래 연결면을 제거했습니다. 출발부와 육지 접속부는 유지합니다.
+- src/resident-appearance.js: 주인공과 별개인 무작위 주민/상점주인19명. 체형·피부·얼굴·머리 모양·옷·모자·안경·수염 변화. 모든 차량의 차체만 무작위 도색하며 유리·타이어·조명은 보존합니다. residentSeatPose는 차종별 좌석과 도로 기울기에 맞춰 골반 위치를 계산합니다.
+- src/resident-roads.js: 실제 도로 높이를 구분하는4760노드 연결 그래프. src/resident-traffic.js: 세 마을 각3명씩 총9명이 상점 왕복/동네 순회/섬 일주를 수행합니다. 나머지3명은 보행 주민입니다. 같은 승용차·SUV·캠핑카·스쿠터 모델, 우측 차선, 좁은길 양보, 길가 정차/방문과 복귀, 플레이어 앞 정지, 일시정지 연동.
+- 플레이어 시작 차량도 헬기를 포함한 모든 차종에 무작위 색상을 배정합니다.
+- 검증: npm test 152/152, npm run build, npm run build:offline 통과. scripts/qa/check-resident-life.py에서 실제300초 AI주행, 경로실패0, 상점/동네 방문, 플레이어 앞0m/s 정차와 재출발, 다리114개 표본 모래0, 모든20입구 렌더링 오류0. 승용차/스쿠터 탑승 자세도 렌더링 확인. 독립 HTML은 네트워크 차단으로 시작 동작을 검사하며 개발 훅을 배포하지 않습니다.
+- 소스와 downloads/Free-Camper-Test.zip을 함께 GitHub main에 저장합니다. 웹 호스팅은 하지 않습니다. 사용자에게는 커밋 SHA가 고정된 ZIP 링크를 제공합니다.
+
+아래는 이전 기록입니다. 최신 안내는 위 내용을 우선합니다.
+
 # 최신 완료 — 2026-11-04 터널 입구 바닥 구멍
 
 최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip

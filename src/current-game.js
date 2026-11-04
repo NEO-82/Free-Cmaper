@@ -1,3 +1,6 @@
+import {createResidentModel,randomizeVehiclePaint} from './resident-appearance.js';
+import {createResidentTraffic} from './resident-traffic.js';
+import {tunnelArchCeiling,tunnelPortalCut,createTunnelPortalPlanes,canCarveTunnelSegment,addTunnelMountainSeals,TUNNEL_FLOOR} from './tunnel-mountain-seal.js';
 // Includes Three.js, MIT licensed; see assets/THREE-MIT.txt.
 // Restored from verified release b69df5e; preserves the complete lake, helicopter and vehicle edition.
 import {addPortalFoundation,isWithinTunnelCut} from './tunnel-portal-ground.js';
@@ -13429,6 +13432,7 @@ void main() {
       Fa[r] = { points: n.track, length: n.length };
     }
     for (const n of Xi) n.length = n.track.at(-1).distance - n.track[0].distance;
+    const tunnelPortalPlanes=createTunnelPortalPlanes(Xi);
     const Fl = Ud(Nn), Oa = Wv(Fl, Nn), Ti = 32, Ir = /* @__PURE__ */ new Map();
     for (const n of Nn) for (let t = 1; t < n.track.length; t++) {
       const e = n.track[t - 1], i = n.track[t], o = { a: e, b: i, road: n, tunnel: e.tunnel || i.tunnel, tunnelId: e.tunnelId ?? i.tunnelId };
@@ -13483,9 +13487,9 @@ void main() {
     function Nl(n, t) {
       let e = -1 / 0;
       for (const i of Ir.get(`${Math.floor(n / Ti)}:${Math.floor(t / Ti)}`) ?? []) {
-        if (!i.tunnel) continue;
+        if (!i.tunnel||!canCarveTunnelSegment(i,tunnelPortalPlanes.get(i.tunnelId),n,t)) continue;
         const { a: o, b: r } = i, s = r.x - o.x, c = r.z - o.z, a = yi(((n - o.x) * s + (t - o.z) * c) / (s * s + c * c || 1), 0, 1);
-        Math.hypot(n - o.x - a * s, t - o.z - a * c) < 22 && (e = Math.max(e, o.y + (r.y - o.y) * a + 11.3));
+        e = Math.max(e,tunnelArchCeiling(o.y+(r.y-o.y)*a,Math.hypot(n-o.x-a*s,t-o.z-a*c)));
       }
       return e;
     }
@@ -13671,7 +13675,7 @@ void main() {
       }, dispose() {
         o.removeFromParent(), r.forEach((g) => g.dispose()), s.forEach((g) => g.dispose()), f.dispose();
       } };
-      return x.update(m), x;
+      return x.update(m), randomizeVehiclePaint(x,"helicopter"), x;
     }
     function n1(n, t) {
       n.replaceChildren(), n.setAttribute("aria-label", t);
@@ -13862,7 +13866,7 @@ void main() {
       return Ar(n, t, Wl(n, t));
     }
     function Jd(n, t) {
-      return n >= Rt.startX && n <= Rt.endX && Math.abs(t - Rt.z) <= Rt.width / 2 ? -5 : Ar(n, t, qd(n, t, Rs(n, t)));
+      return n >= Rt.startX && n <= Rt.endX && Math.abs(t - Rt.z) <= 80 ? -5 : Ar(n, t, qd(n, t, Rs(n, t)));
     }
     function g1(n) {
       const t = new Qt();
@@ -14189,7 +14193,7 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
       }, dispose() {
         r.removeFromParent(), A.dispose(), s.forEach((R) => R.dispose()), c.forEach((R) => R.dispose()), Object.values(_).forEach((R) => R.dispose()), E.dispose();
       } };
-      return w.update(b), C(), w;
+      return w.update(b), C(), randomizeVehiclePaint(w,t), w;
     }
     function I1(n, t, e, i) {
       return { x: (n - dt.minX) / (dt.maxX - dt.minX) * e, y: (t - dt.minZ) / (dt.maxZ - dt.minZ) * i };
@@ -14924,6 +14928,7 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
         m.rotation.x = t === "prone" ? 0 : -(c[x].rotation.x + a[x].rotation.x);
       });
     }
+    const residentConstructors={Group:Qt,Mesh:Jt,MeshStandardMaterial:se,BoxGeometry:Tn,SphereGeometry:Ne,CylinderGeometry:Be};
     function i_(n) {
       const t = new Qt();
       t.name = "Island rural villages", n.add(t);
@@ -14955,10 +14960,10 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
           for (const q of [-1, 1]) u(C, 2.5, 2.4, 0.2, a, q * 4.7, 4, 6.56), u(C, 2.1, 2, 0.22, l, q * 4.7, 4, 6.59);
           const { x: w, z: R } = Rr(d, E, T), D = Math.abs(Math.cos(d.heading)) * 7.5 + Math.abs(Math.sin(d.heading)) * 6.5, z = Math.abs(Math.sin(d.heading)) * 7.5 + Math.abs(Math.cos(d.heading)) * 6.5, N = { kind: "obb", id: C.name, x: w, z: R, width: 15, depth: 13, heading: d.heading, minX: w - D, maxX: w + D, minZ: R - z, maxZ: R + z, minY: 2.5, maxY: 14.5 };
           e.push(N), o.push({ village: d.id, x: w, z: R });
-          const V = Ya(t, { species: S % 2 ? "female" : "male" });
-          V.root.scale.setScalar(0.85), V.backpack.visible = false, V.materials.cream.color.copy(s[(S + f) % 4].color), V.updateFace = () => false;
-          const O = Rr(d, S % 2 ? 19 : -19, S < 2 ? -12 : 16);
-          V.root.position.set(O.x, 2.5, O.z), Ci(V, "stand"), i.push({ id: d.id + "-resident-" + S, name: ["\uC9C0\uC6B0", "\uD558\uB8E8", "\uC18C\uC5F0", "\uBBFC\uC6B0"][(S + f) % 4], village: d.id, model: V, home: O, phase: S * 1.9 + f });
+          const V = createResidentModel(t,residentConstructors);
+          V.root.scale.multiplyScalar(.92), V.backpack.visible = false;
+          const O = Rr(d, (S % 2 ? 19 : -19)+(Math.random()-.5)*6, (S < 2 ? -12 : 16)+(Math.random()-.5)*5);
+          V.root.position.set(O.x, 2.5, O.z), V.pose("stand"), i.push({ id: d.id + "-resident-" + S, name: ["\uC9C0\uC6B0", "\uD558\uB8E8", "\uC18C\uC5F0", "\uBBFC\uC6B0"][(S + f) % 4], village: d.id, model: V, home: O, phase: S * 1.9 + f });
         }
         const v = new Jt(new Be(2.2, 2.4, 1.2, 20), r("#b1b4a3"));
         v.position.set(0, 0.6, 0), m.add(v), e.push({ kind: "circle", x: d.x, z: d.z, radius: 2.4, minY: 2.5, maxY: 3.7, id: d.id + "-well" });
@@ -14966,16 +14971,17 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
       });
       function p(d, f = e, m = null) {
         for (const x of i) {
+          if(x.trafficDriver)continue;
           m && x.model.root.position.distanceTo(m) < 40 && x.model.faceAnimation.update(d, "stand", x.model.settings.species);
           const g = d * 0.055 + x.phase, h = { x: x.home.x + Math.sin(g) * 5, z: x.home.z + Math.cos(g * 0.83) * 5 }, _ = x.model.root.position;
           if (cn(h.x, h.z).distance > (cn(h.x, h.z).road?.width ?? 22) / 2 + 2 && !An(h.x, h.z) && !f.some((M) => Yi(h.x, h.z, 0.5, M))) {
             const M = h.x - _.x, v = h.z - _.z;
-            Math.hypot(M, v) > 1e-3 && (x.model.root.rotation.y = Math.atan2(M, v)), _.set(h.x, Me(h.x, h.z), h.z), Ci(x.model, "stand", true, d * 1e3);
+            Math.hypot(M, v) > 1e-3 && (x.model.root.rotation.y = Math.atan2(M, v)), _.set(h.x, Me(h.x, h.z), h.z), x.model.pose("stand",true,d*1e3);
           }
         }
       }
       return { root: t, colliders: e, residents: i, houses: o, update: p, getState: () => wi.map((d) => ({ ...d, houses: o.filter((f) => f.village === d.id).length, residents: i.filter((f) => f.village === d.id).length })), nearest(d) {
-        return i.filter((f) => f.model.root.position.distanceTo(d) < 3.5).sort((f, m) => f.model.root.position.distanceTo(d) - m.model.root.position.distanceTo(d))[0];
+        return i.filter((f) => f.model.root.visible&&!f.trafficDriver&&f.model.root.position.distanceTo(d) < 3.5).sort((f, m) => f.model.root.position.distanceTo(d) - m.model.root.position.distanceTo(d))[0];
       } };
     }
     function o_(n, t, e) {
@@ -15115,10 +15121,7 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
         return e.set(new B(i, t.max.y + 1, o), new B(0, -1, 0)), e.intersectObject(n, true)[0]?.point.y;
       } };
     }
-    function ff(n, t, e) {
-      const i = t - n.x, o = e - n.z, r = Math.cos(n.heading) * i - Math.sin(n.heading) * o, s = Math.sin(n.heading) * i + Math.cos(n.heading) * o;
-      return Math.abs(r) >= 22 || s <= -50 || s >= 75 ? -1 / 0 : n.y + 11.3;
-    }
+    function ff(n,t,e){return tunnelPortalCut(n,t,e);}
     function c_(n) {
       return n.track.map((t, e) => {
         const i = n.road.track, o = n.start + e, r = i[Math.max(0, o - 1)], s = i[Math.min(i.length - 1, o + 1)], c = s.x - r.x, a = s.z - r.z, l = Math.hypot(c, a) || 1;
@@ -15281,7 +15284,7 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
         return et.forEach((st, vt) => ut.setMatrixAt(vt, st)), i.add(ut), ut;
       }
       A(new Tn(2.4, 0.12, 0.5), M, E), A(new Tn(0.12, 0.22, 0.8), u, T);
-      const w = 4096, R = new Uint8Array(w * w * 4), D = dt.maxX - dt.minX, z = dt.maxZ - dt.minZ, N = (k, Z) => k > Rt.startX && k < Rt.endX && Math.abs(Z - Rt.z) < Rt.width / 2, V = (k, Z, et) => N(k, et) || isWithinTunnelCut(Z, Nl(k, et)) || y.some((ut) => isWithinTunnelCut(Z, ff(ut, k, et)));
+      const w = 4096, R = new Uint8Array(w * w * 4), D = dt.maxX - dt.minX, z = dt.maxZ - dt.minZ, N = (k, Z) => k > Rt.startX && k < Rt.endX && Math.abs(Z - Rt.z) < 80, V = (k, Z, et) => N(k, et) || isWithinTunnelCut(Z, Nl(k, et),TUNNEL_FLOOR) || y.some((ut) => isWithinTunnelCut(Z, ff(ut, k, et),TUNNEL_FLOOR));
       for (const k of y) {
         const Z = Math.max(0, Math.floor((k.x - 80 - dt.minX) / D * w)), et = Math.min(w - 1, Math.ceil((k.x + 80 - dt.minX) / D * w)), ut = Math.max(0, Math.floor((k.z - 80 - dt.minZ) / z * w)), st = Math.min(w - 1, Math.ceil((k.z + 80 - dt.minZ) / z * w));
         for (let vt = ut; vt <= st; vt++) for (let Yt = Z; Yt <= et; Yt++) {
@@ -15301,18 +15304,19 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
           R[pt] = Math.floor(Ot / 256), R[pt + 1] = Ot % 256, R[pt + 2] = R[pt + 3] = 255;
         }
       }
-      addPortalFoundation({root:i,data:R,size:w,bounds:dt,heightAt:e,constructors:{BufferGeometry:me,Float32BufferAttribute:Vt,Mesh:Jt,MeshStandardMaterial:se}});
+      addPortalFoundation({root:i,data:R,size:w,bounds:dt,heightAt:e,roadFloor:TUNNEL_FLOOR,constructors:{BufferGeometry:me,Float32BufferAttribute:Vt,Mesh:Jt,MeshStandardMaterial:se}});
+      addTunnelMountainSeals({root:i,tunnels:Xi,liningTrack:c_,constructors:{BufferGeometry:me,Float32BufferAttribute:Vt,Mesh:Jt,MeshStandardMaterial:se}});
       const O = new ua(R, w, w);
       O.minFilter = O.magFilter = 1003, O.needsUpdate = true;
       const q = t.material, K = q.onBeforeCompile, rt = q.customProgramCacheKey();
       q.onBeforeCompile = function(k, ...Z) {
         K.call(this, k, ...Z), k.uniforms.portalMask = { value: O }, k.uniforms.portalBounds = { value: new _e(dt.minX, dt.minZ, D, z) }, k.vertexShader = `varying vec3 vTunnelWorld;
 ` + k.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
-vTunnelWorld=(modelMatrix*vec4(transformed,1.)).xyz;`), k.uniforms.bridgeFootprint = { value: new _e(Rt.startX, Rt.endX, Rt.z, Rt.width / 2) }, k.fragmentShader = `uniform vec4 bridgeFootprint;uniform sampler2D portalMask;uniform vec4 portalBounds;varying vec3 vTunnelWorld;
+vTunnelWorld=(modelMatrix*vec4(transformed,1.)).xyz;`), k.uniforms.bridgeFootprint = { value: new _e(Rt.startX, Rt.endX, Rt.z, 80) }, k.fragmentShader = `uniform vec4 bridgeFootprint;uniform sampler2D portalMask;uniform vec4 portalBounds;varying vec3 vTunnelWorld;
 ` + k.fragmentShader.replace("#include <clipping_planes_fragment>", `#include <clipping_planes_fragment>
 if(vTunnelWorld.x>bridgeFootprint.x&&vTunnelWorld.x<bridgeFootprint.y&&abs(vTunnelWorld.z-bridgeFootprint.z)<bridgeFootprint.w)discard;
-vec4 portal=texture2D(portalMask,(vTunnelWorld.xz-portalBounds.xy)/portalBounds.zw);float portalHeight=(portal.r*65280.+portal.g*255.)/65535.*512.;if(portal.b>.5&&vTunnelWorld.y>portalHeight-11.32&&vTunnelWorld.y<portalHeight)discard;`);
-      }, q.customProgramCacheKey = () => rt + "-tunnel-cavity-ground-v5", q.needsUpdate = true;
+vec4 portal=texture2D(portalMask,(vTunnelWorld.xz-portalBounds.xy)/portalBounds.zw);float portalHeight=(portal.r*65280.+portal.g*255.)/65535.*512.;if(portal.b>.5&&vTunnelWorld.y>2.48&&vTunnelWorld.y<portalHeight)discard;`);
+      }, q.customProgramCacheKey = () => rt + "-tunnel-arched-sealed-v6", q.needsUpdate = true;
       const Lt = t.raycast;
       t.raycast = function(k, Z) {
         const et = [];
@@ -16329,8 +16333,8 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
       const T = [];
       for (let w = 0; w < 4; w++) T.push({ position: [3.8, 2.23 + w * 0.16, -3.65], color: ["#dd9f63", "#77a37e", "#d8c996", "#5f8eac"][w] });
       Nr(i, new li(1.05, 0.15, 0.7, 1, 0.06), pe("#ffffff"), T), Ka(i, -0.5, 2.45, -3.8, l, p);
-      const C = Ya(i, { species: Math.round(Math.abs(e.x)) % 2 ? "female" : "male" }), y = C.root;
-      y.position.set(3, 0.3, -5.7), C.backpack.visible = false, C.materials.cream.color.set("#d9b46a");
+      const C = createResidentModel(i,residentConstructors), y = C.root;
+      y.position.set(3,.3,-5.7),y.scale.multiplyScalar(1.2),C.backpack.visible=false;
       let b = 0;
       Tf(i, "WELCOME / \uC232\uAE38 \uC0C1\uC810", 3, 4.25, -8.1, 8, 1);
       for (let w = 0; w < 5; w++) {
@@ -16591,6 +16595,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
       n.name === "village plaza" && Of.push(n);
     });
     const kf = jd([...du.group.children.filter((n) => ["mainland parking", "mainland parking rear", "bridge deck"].includes(n.name)), ...Of]), tM = rf(ft("#world-map-canvas")), eM = rf(ft("#mini-map"), { size: 480, labels: false }), Kn = fi.map((n) => V_(Ee, { x: n.x, y: Me(n.x, n.z), z: n.z }));
+    const residentTraffic=createResidentTraffic({scene:Ee,villages:to,data:Qv,createVehicle:D1,world:Ve});
     let Ii = Kn[0], fu = 82;
     const Hr = () => (fu = fu * 16807 % 2147483647, (fu - 1) / 2147483646), hn = Ya(Ee), lt = hn.root;
     lt.position.set(Dr.x, Me(Dr.x, -12), -12);
@@ -16652,7 +16657,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
       const r = Tt.root.position;
       Tt.setLights({ dark: Hn() < 6 || Hn() >= 18 || !!Bo(r.x, r.z, r.y) }), Ve.roadView.update(r);
       const s = Nf.update(Hn(), Pn, un, r, Gr, kn);
-      qf(r, s), Ee.fog.color.copy(s.horizon), Ee.fog.density = Pn === "fog" ? 45e-4 : 38e-5, Dn() && (to.update(Yo, [...to.colliders, ...ge?.colliders() ?? []], r), Kn.forEach((c) => c.update(n)), Ve.animate(n, un, r), Vr.update(n, un, r), Ve.updateCover(r, ge?.bounds)), je.render(Ee, Wt), performance.now() - ic > 250 && (qe(), ic = performance.now()), Ze && ep(), ft('[data-i18n="menuHint"]').textContent = jt("rvMenuHint"), ft("#status").textContent = jt("rvInterior") + " \xB7 " + jt(Ge.resting ? "lyingBack" : "stand"), ft("#interaction-label").textContent = jt(Ge.resting ? "rvGetUp" : Ge.nearest()?.id ?? "rvExplore"), ft("#location-label").textContent = jt("rvInterior"), ft("#journal").textContent = jt("rvWelcome"), ft("#pause-badge").classList.toggle("hidden", Dn());
+      qf(r, s), Ee.fog.color.copy(s.horizon), Ee.fog.density = Pn === "fog" ? 45e-4 : 38e-5, Dn() && (residentTraffic.update(n,{player:{x:lt.position.x,z:lt.position.z,bodyY:lt.position.y},parkedVehicle:Tt?.state,observer:r,hour:Hn()}),to.update(Yo, [...to.colliders, ...ge?.colliders() ?? []], r), Kn.forEach((c) => c.update(n)), Ve.animate(n, un, r), Vr.update(n, un, r), Ve.updateCover(r, ge?.bounds)), je.render(Ee, Wt), performance.now() - ic > 250 && (qe(), ic = performance.now()), Ze && ep(), ft('[data-i18n="menuHint"]').textContent = jt("rvMenuHint"), ft("#status").textContent = jt("rvInterior") + " \xB7 " + jt(Ge.resting ? "lyingBack" : "stand"), ft("#interaction-label").textContent = jt(Ge.resting ? "rvGetUp" : Ge.nearest()?.id ?? "rvExplore"), ft("#location-label").textContent = jt("rvInterior"), ft("#journal").textContent = jt("rvWelcome"), ft("#pause-badge").classList.toggle("hidden", Dn());
     }
     const ac = L_(Ee, { colliders: [...Ve.colliders, ...to.colliders] }), pu = 1400, cc = new Float32Array(pu * 3);
     for (let n = 0; n < pu; n++) cc[n * 3] = Hr() * 160 - 80, cc[n * 3 + 1] = Hr() * 65, cc[n * 3 + 2] = Hr() * 160 - 80;
@@ -16915,7 +16920,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
       return Math.hypot(lt.position.x - n.x, lt.position.z - n.z);
     }
     function Ko() {
-      return [...Ve.colliders, ...to.colliders, ...Kn.flatMap((n) => n.colliders()), ...du.colliders, ...Tt && !ve ? [Tt.collider()] : [], ...ge?.colliders() ?? []];
+      return [...Ve.colliders,...residentTraffic.colliders(), ...to.colliders, ...Kn.flatMap((n) => n.colliders()), ...du.colliders, ...Tt && !ve ? [Tt.collider()] : [], ...ge?.colliders() ?? []];
     }
     function In() {
       return Ji === "world" && !ve && we === "outdoor" && !!ae?.swimming;
@@ -17236,6 +17241,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
         rM(e, t), vu();
         return;
       }
+      if(Dn())residentTraffic.update(e,{player:ve?Tt?.state:{x:lt.position.x,z:lt.position.z,bodyY:lt.position.y},parkedVehicle:ve?null:Tt?.state,observer:lt.position,hour:Hn()});
       if (Dn() && fM(e, n, t), vu(), !xn) {
         $o.updateFace(n / 1e3), je.render(Jn, sc);
         return;
@@ -17296,7 +17302,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
         n.aspect = innerWidth / innerHeight, n.updateProjectionMatrix();
       }), je.setSize(innerWidth, innerHeight);
     }), xu(), Wf(), requestAnimationFrame(np);
-    if(import.meta.env.DEV)window.__portalQA={renderer:je,scene:Ee,camera:Wt,world:Ve,tunnels:Xi,bounds:dt,roadSurfaceAt:cn,portalCutHeight:ff,Vector3:B,Raycaster:Im,get phase(){return Ji;},get driving(){return ve;},get vehicle(){return Tt;},get elapsed(){return un;}};
+    if(import.meta.env.DEV)window.__portalQA={renderer:je,scene:Ee,camera:Wt,world:Ve,villages:to,traffic:residentTraffic,residentConstructors,data:Qv,createVehicle:D1,createHelicopter:e1,tunnels:Xi,bounds:dt,roadSurfaceAt:cn,portalCutHeight:ff,Vector3:B,Raycaster:Im,get phase(){return Ji;},get driving(){return ve;},get vehicle(){return Tt;},get elapsed(){return un;}};
   })();
   document.getElementById("startup").hidden = true;
 } catch (error) {

@@ -1,11 +1,11 @@
 // Keep the ground below the road; only remove terrain inside the tunnel cavity.
 export const TUNNEL_CAVITY_HEIGHT = 11.3;
-export function isWithinTunnelCut(height, ceiling) {
-  return Number.isFinite(ceiling) && height > ceiling - TUNNEL_CAVITY_HEIGHT - .02 && height < ceiling;
+export function isWithinTunnelCut(height, ceiling, roadFloor = ceiling - TUNNEL_CAVITY_HEIGHT) {
+  return Number.isFinite(ceiling) && height > roadFloor - .02 && height < ceiling;
 }
 
 /** Cover the exact rasterized excavation footprint, including both portal approaches. */
-export function buildPortalFoundation({ data, size, bounds, heightAt = () => Infinity }) {
+export function buildPortalFoundation({ data, size, bounds, heightAt = () => Infinity, roadFloor = null }) {
   const positions = [], indices = [], spans = [];
   const dx = (bounds.maxX - bounds.minX) / size, dz = (bounds.maxZ - bounds.minZ) / size;
   let cells = 0;
@@ -20,7 +20,7 @@ export function buildPortalFoundation({ data, size, bounds, heightAt = () => Inf
     if (data[k + 2] < 128) return null;
     // Do not pave actual sea outside the island.
     if (heightAt(bounds.minX + (gx + .5) * dx, bounds.minZ + (gz + .5) * dz) <= 0) return null;
-    return (data[k] * 256 + data[k + 1]) / 65535 * 512 - TUNNEL_CAVITY_HEIGHT - .12;
+    return (roadFloor ?? ((data[k] * 256 + data[k + 1]) / 65535 * 512 - TUNNEL_CAVITY_HEIGHT)) - .12;
   }
   for (let gz = 0; gz < size; gz++) {
     let gx = 0;
@@ -39,8 +39,8 @@ export function buildPortalFoundation({ data, size, bounds, heightAt = () => Inf
   return { positions, indices, spans, cells, ceilingAt };
 }
 
-export function addPortalFoundation({ root, data, size, bounds, heightAt, constructors }) {
-  const coverage = buildPortalFoundation({ data, size, bounds, heightAt });
+export function addPortalFoundation({ root, data, size, bounds, heightAt, roadFloor = null, constructors }) {
+  const coverage = buildPortalFoundation({ data, size, bounds, heightAt, roadFloor });
   const { BufferGeometry, Float32BufferAttribute, Mesh, MeshStandardMaterial } = constructors;
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new Float32BufferAttribute(coverage.positions, 3));
@@ -50,6 +50,6 @@ export function addPortalFoundation({ root, data, size, bounds, heightAt, constr
   // The existing contact sampler already collects this category of solid floor.
   foundation.name = 'walkable-path'; foundation.userData.tunnelPortalFoundation = true;
   foundation.receiveShadow = true; root.add(foundation);
-  root.userData.portalGroundRepair = { foundation, spans: coverage.spans.length, cells: coverage.cells, ceilingAt: coverage.ceilingAt };
+  root.userData.portalGroundRepair = { foundation, spans: coverage.spans.length, cells: coverage.cells, roadFloor, ceilingAt: coverage.ceilingAt };
   return foundation;
 }
