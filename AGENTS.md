@@ -13,3 +13,9 @@
 - `src/resident-appearance.js` creates independent resident/shopkeeper models and random exterior paint for every player/AI vehicle. Keep windows, tyres and lamps untouched.
 - `src/resident-roads.js` builds the connected, height-aware road graph. `src/resident-traffic.js` manages nine drivers, right-hand lanes, narrow-road yielding, off-lane parking, visits and three activities. Main runtime updates it only while the game advances and adds its OBB colliders to player collision queries.
 - Use `scripts/qa/check-resident-life.py` for live scene/AI/bridge/all-portal checks, and `check-resident-appearance.py` for the independent avatar renderer. Capture the WebGL canvas directly; full-page screenshots can wait indefinitely when test RAF is frozen.
+
+## Camping music and helicopter flight (2026-11-04)
+
+- Current music is `src/camping-music-score.js` (ten original 300-second scores) and `src/camping-music-audio.js` (32-bit float stereo Web Audio instruments, shuffled ten-track playlist, 3-second equal-power crossfades). The old bundled short/16-voice music loop has been removed. Keep character and vehicle effects in the current entry.
+- `src/helicopter-flight.js` is authoritative for 117.6m/s flight, four skid-contact ground fitting, continuous descent-assisted landing, five-second engine shutdown and rotor RPM. F boards/exits; G has no action. Camera delay is seven seconds for helicopters, 0.2 for ground vehicles, with no return at rest.
+- QA: `scripts/qa/check-camping-music.py` renders all ten Float32 stereo excerpts and a complete five-minute track plus crossfade; `scripts/qa/check-helicopter-music.py` exercises real mouse/key inputs and terrain landing in the current game. Production strips development hooks.

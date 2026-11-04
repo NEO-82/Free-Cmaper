@@ -1,3 +1,18 @@
+# 최신 완료 — 2026-11-04 캠핑 음악·헬기 조작 및 착륙
+
+최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip
+
+- 현재 진입점은 src/current-game.js입니다. 이전 src/main.js로 바꾸지 마세요. 기존 주민 AI·무작위 외형/차량 색상, 모든20터널 입구 마감, 다리 모래 제거, 호수/폭포/헬기/확장맵을 유지합니다.
+- src/camping-music-score.js: 새로 구성한 피크닉/캠핑 음악10곡, 각300초. 6구간의 편곡과 기타·피아노·플루트·마림바·첼레스타·베이스·패드·셰이커. src/camping-music-audio.js: Float32 음색/2채널 잔향, 무작위로 섞은10곡을 반복하며3초 equal-power 크로스페이드. 이전 번들16화음 루프는 제거했습니다. 출력 장치 비트 깊이는 장치 설정을 따릅니다.
+- src/helicopter-flight.js: 최고속도117.6m/s(423.36km/h, 기존84m/s의1.4배), 네 착륙다리 접점 샘플로 경사면에 맞춘 착륙, 지면4m 이내 하강시 수평 감속, 착륙5초 후 엔진 종료와 로터 감속. 하강 버튼을 계속 눌러도 재시동되지 않으며 왼쪽 마우스 상승으로 재시동합니다. 주차 중에도 종료 타이머가 진행합니다.
+- 헬기 승하차 F, G는 제거. 화면 한국어/영어 조작 안내도 F로 통일. 공중/이동 중 하차 차단. 헬기 시점은 마우스 조작 후7초, 일반차량0.2초. 정지 중에는 자동복귀하지 않습니다.
+- npm test 156/156 통과, 최종 변경 후 관련4개 검사 재확인. npm run build/build:offline 통과. scripts/qa/check-helicopter-music.py가 실제 키/마우스로 F승차·G무동작·상승·공중 하차 차단·최고423.36km/h·6.99초 시점 유지/10초 복귀·지형 착륙·5초 종료/로터0/엔진음 정지·F하차와 재탑승·재시동 확인, 오류0.
+- scripts/qa/check-camping-music.py는10곡의 Float32 스테레오 발췌와 전체5분 곡/전환을 OfflineAudioContext로 렌더링합니다. scripts/qa/check-current-offline.py는 네트워크 차단 최종HTML 시작과 개발 훅 제거를 확인합니다.
+- 최종 오디오 검증:10곡 모두 Float32 2채널 음색 출력/스테레오 차이 확인. 전체306초 렌더에서5분 곡과 다음 곡3초 크로스페이드, 무음 공백/클리핑/급격한 경계 변화 없음, 오류0. 최종 독립HTML은 오프라인 시작/HTTP요청0/오류0/개발 훅 제거 확인.
+- 소스와 실행 ZIP을 함께 커밋해 GitHub main에 저장하고 사용자에게 고정 SHA 다운로드 링크를 제공합니다. 웹 배포 없음.
+
+아래는 이전 기록입니다. 최신 안내는 위 내용을 우선합니다.
+
 # 최신 완료 — 2026-11-04 터널 산 접합부·다리·주민 운전 AI
 
 최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip
