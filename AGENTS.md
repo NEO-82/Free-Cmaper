@@ -19,3 +19,9 @@
 - Current music is `src/camping-music-score.js` (ten original 300-second scores) and `src/camping-music-audio.js` (32-bit float stereo Web Audio instruments, shuffled ten-track playlist, 3-second equal-power crossfades). The old bundled short/16-voice music loop has been removed. Keep character and vehicle effects in the current entry.
 - `src/helicopter-flight.js` is authoritative for 117.6m/s flight, four skid-contact ground fitting, continuous descent-assisted landing, five-second engine shutdown and rotor RPM. F boards/exits; G has no action. Camera delay is seven seconds for helicopters, 0.2 for ground vehicles, with no return at rest.
 - QA: `scripts/qa/check-camping-music.py` renders all ten Float32 stereo excerpts and a complete five-minute track plus crossfade; `scripts/qa/check-helicopter-music.py` exercises real mouse/key inputs and terrain landing in the current game. Production strips development hooks.
+
+## Illustrated title screen (2026-11-07)
+
+- `assets/title-sunset-camp.webp` is the new original 2D anime-style summit sunset campsite art: rear-view couple in chairs, tent and campfire. The balloon title text stays unchanged.
+- `src/current-game.js` imports it with `?inline` and puts it in the title screen CSS custom property; `index.html` has responsive backgrounds. Keep the image embedded in both builds so the standalone HTML works offline. Title-only frames skip the covered 3D preview; setup still renders its preview.
+- `scripts/qa/check-title-artwork.py` checks the actual offline bundle at desktop/laptop/mobile sizes, unchanged title, decoded embedded image, menu transitions, zero network requests/errors and absence of dev hooks.

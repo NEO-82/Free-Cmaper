@@ -1,3 +1,17 @@
+# 최신 완료 — 2026-11-07 산 정상 노을 캠핑 타이틀 배경
+
+최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip
+
+- 제목 뿌뿌의 자유로운 캠핑 및 기존 풍선 글씨/메뉴는 그대로 유지했습니다.
+- assets/title-sunset-camp.webp: 생성한 원본2D 애니메이션풍 일러스트(1672×941). 산 정상에서 남녀 커플이 캠핑 의자에 앉아 노을을 바라보는 뒷모습, 곁에 텐트와 모닥불/주전자/랜턴을 배치한 장면입니다.
+- src/current-game.js에서 ?inline으로 내장해 #title-screen의 CSS 변수에 연결했습니다. index.html에서 왼쪽 명암과 세로 화면의 배경 크기/위치를 지정합니다. 독립 HTML에도 내장하여 인터넷 연결이 필요하지 않습니다.
+- 타이틀을 가리는3D 장면은 타이틀에서 매 프레임 다시 그리지 않습니다. 캐릭터/계절/이동수단 선택 화면의 기존3D 미리보기는 유지합니다.
+- scripts/qa/check-title-artwork.py: 실제 독립HTML의1440×900/1280×720/390×844화면, 동일 제목과 내장 이미지 디코드, 게임시작→뒤로→설정 동작, 네트워크요청0/오류0/개발 훅 없음 확인. npm run build/build:offline 사용.
+- 현재 실행 진입점은 src/current-game.js입니다. 이전 src/main.js로 되돌리지 마세요. 기존10곡 캠핑 음악/헬기 속도·F키 승하차·지형 착륙·5초 시동 종료·7초 시점 복귀, 주민 운전AI·터널/다리/호수/폭포/확장맵은 그대로 포함합니다.
+- 소스/이미지/실행ZIP을 GitHub main에 함께 저장합니다. 웹 호스팅은 하지 않으며 사용자에게 SHA고정 ZIP 링크를 제공합니다.
+
+아래는 이전 기록입니다. 위 최신 안내를 우선합니다.
+
 # 최신 완료 — 2026-11-04 캠핑 음악·헬기 조작 및 착륙
 
 최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip

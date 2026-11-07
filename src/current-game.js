@@ -1,3 +1,4 @@
+import titleSunsetArtwork from '../assets/title-sunset-camp.webp?inline';
 import {HELICOPTER_CONFIG,stepHelicopter} from './helicopter-flight.js';
 import {createCampingMusic} from './camping-music-audio.js';
 import {createResidentModel,randomizeVehiclePaint} from './resident-appearance.js';
@@ -16520,7 +16521,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
     const ie = j1(), Uf = /* @__PURE__ */ new Set(), K_ = Cf.filter((n) => !["tent", "firewood", "stone", "soil", "water"].includes(n.id)), Ff = ft("#app");
     Ff.innerHTML = `
 <div id="scene"></div>
-<section id="title-screen" class="title-screen" data-label="title">
+<section id="title-screen" class="title-screen" data-label="title" style="--title-camping-art:url('${titleSunsetArtwork}')">
   <div class="title-content"><div class="brand">MY OWN LITTLE CAMPING</div>
     <div class="eyebrow">A LITTLE CLOSER TO THE QUIET</div><h1 data-i18n="title"></h1>
     <p data-i18n="titleNote"></p><nav class="title-nav"><button id="start" class="primary" data-i18n="start">${jt("start")}</button><button id="title-options" data-i18n="options">${jt("options")}</button></nav>
@@ -17214,7 +17215,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
       }
       if(Dn())residentTraffic.update(e,{player:ve?Tt?.state:{x:lt.position.x,z:lt.position.z,bodyY:lt.position.y},parkedVehicle:ve?null:Tt?.state,observer:lt.position,hour:Hn()});
       if (Dn() && fM(e, n, t), vu(), !xn) {
-        $o.updateFace(n / 1e3), je.render(Jn, sc);
+        Ji !== "title" && ($o.updateFace(n / 1e3), je.render(Jn, sc));
         return;
       }
       if (!Dn() && !Gn) return;
