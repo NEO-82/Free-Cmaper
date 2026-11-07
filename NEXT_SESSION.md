@@ -1,3 +1,15 @@
+# 최신 완료 — 2026-11-07 스쿠터 안쪽 기울기
+
+최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip
+
+- 사용자는 좌우 조작 반전이 아니라 실제 바이크처럼 좌회전시 왼쪽, 우회전시 오른쪽으로 기울기를 요청했습니다. 입력을 뒤집지 마세요.
+- 실제 실행 src/current-game.js의 ef(서스펜션)에서 이륜차의 동적 roll 목표 부호만 +0.013→-0.013으로 수정했습니다. 조향/진행 방향/앞바퀴/다른 차량은 유지합니다. 플레이어는 차체 quaternion을 공유하므로 함께 안쪽으로 기울어집니다. 중립에서는 기존 스프링으로 직립 복귀합니다.
+- scripts/qa/check-scooter-lean.py는 실제 A/D/좌우 화살표로 주행하며 기존 조향 부호 유지, 회전 안쪽으로 기울기, 탑승자 회전 일치, 조향 해제 후 직립 복귀를 확인합니다.
+- 타이틀 노을 캠핑 일러스트와 기존 게임 기능을 유지합니다. 현재 진입점은 src/current-game.js이며, 이전 src/main.js로 바꾸지 마세요.
+- 소스와 실행ZIP을 GitHub main에 함께 저장하고 고정 SHA ZIP 다운로드를 제공합니다.
+
+아래는 이전 기록입니다.
+
 # 최신 완료 — 2026-11-07 산 정상 노을 캠핑 타이틀 배경
 
 최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip

@@ -13981,7 +13981,7 @@ void main() {
       return { wheels: c, pitch: p, roll: m, height: x + t.wheelRadius * (1 - Math.cos(p) * Math.cos(m)) };
     }
     function ef(n, t, e, i, { acceleration: o = 0, turnRate: r = 0 } = {}) {
-      const s = { bodyY: n.bodyY ?? t.height, heaveVelocity: n.heaveVelocity ?? 0, pitch: n.pitch ?? t.pitch, pitchVelocity: n.pitchVelocity ?? 0, roll: n.roll ?? t.roll, rollVelocity: n.rollVelocity ?? 0, airborne: n.airborne ?? false }, c = tf(t.pitch - o * 3e-3, -0.65, 0.65), a = (n.speed ?? 0) * r, l = tf(t.roll + a * (i.track ? -25e-4 : 0.013), -0.6, 0.6), u = Math.max(1, Math.ceil(Math.max(0, Math.min(e, 0.25)) * 120)), p = Math.max(0, Math.min(e, 0.25)) / u;
+      const s = { bodyY: n.bodyY ?? t.height, heaveVelocity: n.heaveVelocity ?? 0, pitch: n.pitch ?? t.pitch, pitchVelocity: n.pitchVelocity ?? 0, roll: n.roll ?? t.roll, rollVelocity: n.rollVelocity ?? 0, airborne: n.airborne ?? false }, c = tf(t.pitch - o * 3e-3, -0.65, 0.65), a = (n.speed ?? 0) * r, l = tf(t.roll + a * (i.track ? -25e-4 : -0.013), -0.6, 0.6), u = Math.max(1, Math.ceil(Math.max(0, Math.min(e, 0.25)) * 120)), p = Math.max(0, Math.min(e, 0.25)) / u;
       for (let d = 0; d < u; d++) s.bodyY > t.height + i.travel + 0.12 && (s.airborne = true), s.airborne ? (s.heaveVelocity -= 9.8 * p, s.bodyY += s.heaveVelocity * p, s.bodyY <= t.height && (s.bodyY = t.height, s.heaveVelocity = Math.max(0, -s.heaveVelocity * 0.06), s.airborne = false)) : (s.heaveVelocity += ((t.height - s.bodyY) * 110 - s.heaveVelocity * 17) * p, s.bodyY += s.heaveVelocity * p, s.bodyY = Math.max(t.height - i.travel * 0.35, s.bodyY)), s.pitchVelocity += ((c - s.pitch) * 95 - s.pitchVelocity * 16) * p, s.pitch += s.pitchVelocity * p, s.rollVelocity += ((l - s.roll) * 95 - s.rollVelocity * 16) * p, s.roll += s.rollVelocity * p;
       return { ...s, contacts: s.airborne ? 0 : t.wheels.length, ground: t };
     }
@@ -17274,7 +17274,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
         n.aspect = innerWidth / innerHeight, n.updateProjectionMatrix();
       }), je.setSize(innerWidth, innerHeight);
     }), xu(), Wf(), requestAnimationFrame(np);
-    if(import.meta.env.DEV)window.__portalQA={renderer:je,scene:Ee,player:lt,advanceFlight:(dt)=>fM(dt,performance.now(),dt),advanceFrame:np,camera:Wt,world:Ve,villages:to,traffic:residentTraffic,residentConstructors,audio:ie,stepHelicopter:t1,cameraReturn:a1,get cameraOrbit(){return {...mi};},look:Mu,data:Qv,createVehicle:D1,createHelicopter:e1,tunnels:Xi,bounds:dt,roadSurfaceAt:cn,portalCutHeight:ff,Vector3:B,Raycaster:Im,get phase(){return Ji;},get driving(){return ve;},get vehicle(){return Tt;},get elapsed(){return un;}};
+    if(import.meta.env.DEV)window.__portalQA={renderer:je,scene:Ee,player:lt,advanceFlight:(dt)=>fM(dt,performance.now(),dt),advanceFrame:np,camera:Wt,world:Ve,villages:to,traffic:residentTraffic,residentConstructors,audio:ie,stepHelicopter:t1,stepGroundVehicle:R1,cameraReturn:a1,get cameraOrbit(){return {...mi};},look:Mu,data:Qv,createVehicle:D1,createHelicopter:e1,tunnels:Xi,bounds:dt,roadSurfaceAt:cn,portalCutHeight:ff,Vector3:B,Raycaster:Im,get phase(){return Ji;},get driving(){return ve;},get vehicle(){return Tt;},get elapsed(){return un;}};
   })();
   document.getElementById("startup").hidden = true;
 } catch (error) {

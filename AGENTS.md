@@ -25,3 +25,5 @@
 - `assets/title-sunset-camp.webp` is the new original 2D anime-style summit sunset campsite art: rear-view couple in chairs, tent and campfire. The balloon title text stays unchanged.
 - `src/current-game.js` imports it with `?inline` and puts it in the title screen CSS custom property; `index.html` has responsive backgrounds. Keep the image embedded in both builds so the standalone HTML works offline. Title-only frames skip the covered 3D preview; setup still renders its preview.
 - `scripts/qa/check-title-artwork.py` checks the actual offline bundle at desktop/laptop/mobile sizes, unchanged title, decoded embedded image, menu transitions, zero network requests/errors and absence of dev hooks.
+
+- Scooter inward banking (2026-11-07): keep steering inputs unchanged. In current-game.js `ef`, two-wheel dynamic roll uses -0.013 times speed*yawRate so the bike/rider lean into turns. Other vehicle roll terms stay unchanged. `scripts/qa/check-scooter-lean.py` checks real A/D/arrow controls, inward lean, rider orientation and recovery.
