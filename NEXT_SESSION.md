@@ -1,3 +1,21 @@
+# 차량 시냇물 점프·물에서 이동/탈출 (2026-11-08)
+
+- 공중에 있는 차량이 수심 판정에 막히지 않고 시냇물을 점프로 건너도록 수정했습니다. 수면 위에서는 물 저항이 점프 속도를 깎지 않습니다.
+- 물에 빠져도 W/S 전진·후진과 조향이 가능합니다. 얕은 물은 바닥을 따라 주행하고, 깊은 물은 부력으로 받쳐 저속 이동합니다. 강둑으로 빠져나오면 일반 주행으로 돌아옵니다.
+- 승용차·SUV·캠핑카·스쿠터 모두 적용하며, 공중 연속 점프 제한과 육지/다리의 주행·충돌은 유지합니다.
+- 자동 검사165개와 실제4종 시냇물 점프, 수중 전후진/강둑 탈출, 실제W/S 조작을 확인했습니다.
+
+최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip
+
+- src/vehicle-water.js: vehicleWaterSupport는 raw bed와 실제 waterAt으로 얕은 바닥/깊은 물의 부력 지지 높이를 계산합니다. kind별 draft는 sedan.6/suv.65/motorhome.75/scooter.3m. vehicleWaterState는 실제 bodyY 침수량으로 물 저항, 추진 계수와 수중 전후진 속도를 계산합니다. 수면보다 높은 점프/다리/육지/지하터널(null waterAt)은 젖지 않습니다.
+- 실제 src/current-game.js P1은 rawHeight/waterAt을 보존하고 물 지지 높이로 Ga/서스펜션/점프/Gl을 계산합니다. 이전 C1 수심 벽과 waterAllowedAt 차단을 제거했습니다. 얕은 침수에서는 속도 제한을 선형으로 섞어 급정지하지 않게 합니다. 물에 잠기면 스키드마크를 만들지 않으며, 물가에서는 maxStep/grade를 완화해 전후진 탈출을 돕습니다. 기존 수목/구조물/세계 경계 충돌은 유지합니다.
+- tests/vehicle-water.test.js 신규2개 포함 npm test165/165, build/build:offline 통과. scripts/qa/check-vehicle-water.py:4종 모두 합성/실제 시냇물 점프 통과(실제시냇물에서 waterImmersion0), 깊은 물4초 전후진 약14~22m, 양방향 강둑 탈출, 실제SUV W/S로 실제시냇물 탈출, 오류0.
+- 실제 시냇물 검증 위치 x=-2397.319,z940, 수면.12m. 침수 후 W와 반대 기수에서S 모두 동쪽 강둑으로 탈출합니다. 기존 점프/낙하산/경비행기/탑승 캐릭터/직접 타이틀/카메라/호수와 큰맵 기능을 유지합니다.
+- 최종 독립HTML의SUV 출발을 인터넷 차단 상태에서 확인했고, HTTP요청0/실행오류0/개발 훅 제거를 통과했습니다.
+- 활성 진입점은 src/current-game.js입니다. 이전 src/main.js/vehicle-physics.js의 수심 제한은 역사적 참고이므로 되돌리지 마세요. 소스·테스트·실행ZIP을 함께 GitHub main에 저장하고 SHA고정 다운로드를 제공합니다.
+
+아래는 이전 기록입니다. 최신 안내를 우선합니다.
+
 # 차량 점프·탑승 자세·경비행기와 낙하산 (2026-11-08)
 
 - 승용차·SUV·캠핑카·스쿠터에 R키 점프, 경사로 도약, 중력 낙하와 착지를 추가했습니다. Space 사이드브레이크는 유지합니다. 공중에서 연속 점프할 수 없습니다.
@@ -9,6 +27,7 @@
 
 최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip
 
+- 최종 독립HTML의SUV 출발을 인터넷 차단 상태에서 확인했고, HTTP요청0/실행오류0/개발 훅 제거를 통과했습니다.
 - 활성 진입점은 src/current-game.js입니다. 이전 src/main.js로 되돌리지 마세요. 제목 직접 선택/빠른 초기화/도로 카메라/헬기/음악10곡/주민AI/호수·폭포/확장맵을 유지합니다.
 - src/vehicle-jump.js는 차량 수직 탄도 상태를 담당합니다. 실제 P1에서 ef의 pitch/roll 서스펜션과 조합하며, 점프 시 중력9.81m/s², kind별 impulse6~7.4m/s, 접지/천장/착지. R1이 서브스텝의 launched/landed/impact를 집계합니다. 공중에서는 구동/브레이크로 수평 운동을 강제로 정지시키지 않습니다.
 - src/light-airplane.js는 독립 경비행기 모델과 물리, AIRPLANE_CONFIG, planeSpawn입니다. 기수 pitch는 양수 상승이며 렌더 X회전은 -pitch입니다. 이륙 속도26m/s, stall20m/s, 최고90m/s, 천장1800m. 실제 bridge startX+35m/z 중앙/headingπ/2, 캐릭터는 뒤4.7m. 지상 정지시F하차, 비행중F탈출. 무인 기체도 감속/활공/착지를 계속합니다.

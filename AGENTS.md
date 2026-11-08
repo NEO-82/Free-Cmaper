@@ -43,3 +43,9 @@
 - `src/parachute.js`: velocity-preserving bailout, next F deploys, progressive inflation/drag, WASD canopy steering and terrain/water touchdown. While ejection exists, skip normal walking physics/pose; restore walking/swimming and hide the canopy at touchdown.
 - Main entry wires the model/inputs/cameras/HUD/audio/random paint. Existing helicopter mouse-button controls and seven-second return remain unchanged. The new airplane uses the one-second aircraft-camera return.
 - `scripts/qa/check-airplane-jump.py` exercises real controls, four ground chassis, both characters in all six vehicles, runway takeoff, bailout/parachute/landing and render output. `check-current-offline.py airplane` verifies the actual standalone release; no argument defaults to helicopter.
+
+## Ground vehicles in water (2026-11-08)
+
+- `src/vehicle-water.js` supplies shallow-bed contact/deep-water buoyancy and immersion-dependent drag/drive/speed limits. The current P1 uses this support in Ga/Gl/suspension/jump. Keep raw height and altitude-aware water callbacks separate; null water must not become a sea-level surface in tunnels.
+- Do not restore the removed C1/maxWadeDepth movement gate or waterAllowedAt rejection for ground vehicles. Airborne vehicles above the water have zero water drag; submerged vehicles can drive/steer/reverse and climb out. Dry roads and bridges retain their original support and speed. Existing structure/tree/world-boundary collision stays active.
+- `scripts/qa/check-vehicle-water.py` covers all four chassis jumping synthetic/actual streams, deep-water forward/reverse, both bank exits and actual player W/S recovery. `tests/vehicle-water.test.js` covers support/immersion and untouched airborne arcs.

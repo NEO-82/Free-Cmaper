@@ -1,3 +1,4 @@
+import {vehicleWaterSupport,vehicleWaterState} from './vehicle-water.js';
 import {stepVehicleJump} from './vehicle-jump.js';
 import {AIRPLANE_CONFIG,planeSpawn,stepAirplane,createAirplane} from './light-airplane.js';
 import {ejectFromAirplane,stepParachute,createParachute} from './parachute.js';
@@ -14053,10 +14054,6 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
         return r === null ? 0 : r - e(o.x, o.z);
       }));
     }
-    function C1(n, t, e = Me, i = Ai, o = null) {
-      const r = Zl(n, t, e, i);
-      return r <= t.maxWadeDepth ? true : !!o && r <= Zl(o, t, e, i) + 1e-6;
-    }
     function R1(n, t, e, i = [], o = {}) {
       if (!ln[n.kind] || !Number.isFinite(e) || e <= 0) return { ...n };
       const r = Math.ceil(Math.min(e, 0.1) * 120), s = Math.min(e, 0.1) / r;
@@ -14065,21 +14062,22 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
       return { ...c, impactSpeed: a,launched,landed };
     }
     function P1(n, t, e, i, o) {
-      const r = ln[n.kind], s = +!!t.forward - +!!t.backward, c = +!!t.left - +!!t.right, a = o.heightAt ?? ((Pt, le) => Go(Pt, le, n.bodyY ?? Me(n.x, n.z))), l = Ga(n, r, a), u = { x: Math.sin(n.heading), z: Math.cos(n.heading) }, p = { x: Math.cos(n.heading), z: -Math.sin(n.heading) };
+      const r = ln[n.kind], s = +!!t.forward - +!!t.backward, c = +!!t.left - +!!t.right, rawHeight = o.heightAt ?? ((Pt, le) => Go(Pt, le, n.bodyY ?? Me(n.x, n.z))), waterAt=o.waterSurfaceAt??Ai, water=vehicleWaterState(n,rawHeight,waterAt), a=(x,z)=>vehicleWaterSupport(n.kind,x,z,rawHeight,waterAt), l = Ga(n, r, a), u = { x: Math.sin(n.heading), z: Math.cos(n.heading) }, p = { x: Math.cos(n.heading), z: -Math.sin(n.heading) };
       let d = n.vx ?? u.x * n.speed, f = n.vz ?? u.z * n.speed, m = d * u.x + f * u.z, x = d * p.x + f * p.z;
-      const g = Math.max(0, -Math.sin(l.pitch) * Math.sign(s || m)), h = !!t.handbrake, _ = h && Math.hypot(d, f) > 8 && !n.airborne, M = !!t.brake || s * m < 0, v = Fr(n.traction ?? 1, _ ? 0.05 : 1, e * (_ ? 7 : 1.8)), S = { front: go, rear: go * v }, E = A1(r, { throttle: M ? 0 : s, handbrake: h, frontGrip: S.front, rearGrip: S.rear }), T = T1(r, { service: M, handbrake: h, sliding: _ }), C = s > 0 ? r.maxSpeed / (1 + g * 1.4) : s < 0 ? -r.maxSpeed * 0.4 / (1 + g * 1.4) : 0, y = s < 0 && Math.abs(m) < 5 && !n.airborne, b = y && (Math.abs(l.pitch) > 0.025 || Zl(n, r, a, o.waterSurfaceAt ?? Ai) > r.maxWadeDepth), A = Math.abs(E.front + E.rear) * (b ? 1.3 : 1), w = T.front + T.rear;
-      !n.airborne && !M && A && (m = Fr(m, C, e * A)), !n.airborne && w ? m = Fr(m, 0, e * w) : s || n.airborne || (m = Fr(m, 0, e * 5)), !M && !h && !n.airborne && (m += 9.8 * Math.sin(l.pitch) * e);
+      const g = Math.max(0, -Math.sin(l.pitch) * Math.sign(s || m)), h = !!t.handbrake, _ = h && Math.hypot(d, f) > 8 && !n.airborne, M = !!t.brake || s * m < 0, v = Fr(n.traction ?? 1, _ ? 0.05 : 1, e * (_ ? 7 : 1.8)), S = { front: go, rear: go * v }, E = A1(r, { throttle: M ? 0 : s, handbrake: h, frontGrip: S.front, rearGrip: S.rear }), T = T1(r, { service: M, handbrake: h, sliding: _ }), C = s > 0 ? r.maxSpeed / (1 + g * 1.4) : s < 0 ? -r.maxSpeed * 0.4 / (1 + g * 1.4) : 0, y = s < 0 && Math.abs(m) < 5 && !n.airborne, b = y && (Math.abs(l.pitch) > 0.025 || Zl(n, r, a, o.waterSurfaceAt ?? Ai) > r.maxWadeDepth), A = Math.abs(E.front + E.rear) * (b ? 1.3 : 1) * water.driveScale, w = T.front + T.rear;
+      !n.airborne && !M && A && (m = Fr(m, water.immersion>.01 ? C*(1-water.immersion)+yi(C,-water.reverseSpeed,water.maxSpeed)*water.immersion : C, e * A)), !n.airborne && w ? m = Fr(m, 0, e * w) : s || n.airborne || (m = Fr(m, 0, e * 5)), !M && !h && !n.airborne && (m += 9.8 * Math.sin(l.pitch) * e);
+      m*=Math.exp(-water.drag*e);x*=Math.exp(-water.drag*e);
       const R = Math.abs(m), D = nf * Math.min(r.turnRate * go / (1 + R * R / 900), 12.5 * go / Math.max(1, R)), z = c * D * (_ ? 1.85 : 1) * Math.min(1, R / 4) * Math.sign(m), N = Fr(n.yawRate ?? 0, z, e * (_ ? 3.5 : 5.5 * nf)), V = n.heading + N * e;
       d = u.x * m + p.x * x, f = u.z * m + p.z * x;
       const O = { x: Math.sin(V), z: Math.cos(V) }, q = { x: Math.cos(V), z: -Math.sin(V) };
       let K = d * O.x + f * O.z, rt = d * q.x + f * q.z;
       rt *= Math.exp(-(n.airborne ? 0.15 : 0.65 * S.front + 14 * S.rear) * e), M && (rt = Fr(rt, 0, (T.front + T.rear) * e)), Math.abs(K) < 0.05 && !s && (K = 0), Math.abs(rt) < 0.01 && (rt = 0), d = O.x * K + q.x * rt, f = O.z * K + q.z * rt;
-      const Lt = { x: d * e, z: f * e }, Xt = Gl(n, Lt, i, r.radius, { vehicle: true, heightAt: a, allowWater: true, waterAllowedAt: (Pt, le) => C1({ ...n, x: Pt, z: le, heading: V }, r, a, o.waterSurfaceAt ?? Ai, y ? n : null), maxStep: n.airborne ? 0 : y ? r.wheelRadius * 0.85 : 0.15, maxVehicleGrade: y ? 1.8 : 1.35, footY: n.bodyY ?? l.height, bodyHeight: n.kind === "motorhome" ? 4.6 : 3.7 }), ct = Math.hypot(Lt.x, Lt.z), _t = Math.hypot(Xt.x - n.x, Xt.z - n.z), k = ct > 1e-7 && _t < ct * 0.45;
+      const Lt = { x: d * e, z: f * e }, Xt = Gl(n, Lt, i, r.radius, { vehicle: true, heightAt: a, allowWater: true, maxStep: n.airborne ? 0 : water.immersion>.01 ? Math.max(.35,r.wheelRadius*.9) : y ? r.wheelRadius * 0.85 : 0.15, maxVehicleGrade: water.immersion>.01 ? 2.2 : y ? 1.8 : 1.35, footY: n.bodyY ?? l.height, bodyHeight: n.kind === "motorhome" ? 4.6 : 3.7 }), ct = Math.hypot(Lt.x, Lt.z), _t = Math.hypot(Xt.x - n.x, Xt.z - n.z), k = ct > 1e-7 && _t < ct * 0.45;
       k ? (K = 0, d = 0, f = 0, rt = 0) : ct > 2e-3 && _t < ct * 0.98 && (d = (Xt.x - n.x) / e, f = (Xt.z - n.z) / e, K = d * O.x + f * O.z, rt = d * q.x + f * q.z);
       const Z = Math.atan2(rt, Math.max(0.1, Math.abs(K))), et = M && !t.park || h, ut = Math.hypot(d, f), st = ut > 8 && Math.abs(Z) > 0.085 ? Math.min(1, Math.abs(rt) / 3) : 0, vt = M && !t.park && ut > 8 ? 0.6 : 0, Yt = !n.airborne && !k, U = { front: Yt && !h ? Math.max(st, vt) : 0, rear: Yt ? Math.max(st, vt, h && ut > 3 ? 0.75 : 0) : 0 }, Nt = Math.max(U.front, U.rear), zt = ct > 2e-3 && _t < ct * 0.98 ? Math.max(0, (ct - _t) / e) : 0, bt = { ...n, ...Xt, impactSpeed: zt, heading: V, speed: K, vx: d, vz: f, yawRate: N, blocked: k, traction: v, tyreGrip: S, axleBrakes: T, axleDrive: E, handbrake: h, braking: et, reversing: K < -0.2, slipAngle: Z, skidAxles: U, skidIntensity: Nt, drifting: ut > 8 && Math.abs(Z) > 0.1 };
       const ground=Ga(bt,r,a),suspension=ef(bt,ground,e,r,{acceleration:(K-n.speed)/e,turnRate:N});
       const jump=stepVehicleJump(n,suspension,ground,e,r,{jump:t.jump,ceiling:o.ceilingAt?.(bt.x,bt.z,n.bodyY)??Infinity});
-      return {...bt,...jump,impactSpeed:Math.max(bt.impactSpeed,jump.landingSpeed*.7)};
+      return {...bt,...jump,waterImmersion:water.immersion,floating:water.floating&&water.immersion>.01,skidIntensity:water.immersion>.01?0:bt.skidIntensity,skidAxles:water.immersion>.01?{front:0,rear:0}:bt.skidAxles,impactSpeed:Math.max(bt.impactSpeed,jump.landingSpeed*.7)};
     }
     function of(n, t = []) {
       const e = n.kind === "airplane" ? 6 : n.kind === "helicopter" ? 4.5 : ln[n.kind].radius;
