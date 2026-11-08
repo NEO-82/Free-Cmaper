@@ -1,3 +1,4 @@
+from direct_launch import start_trip
 from playwright.sync_api import sync_playwright
 import json,base64
 from pathlib import Path
@@ -7,11 +8,11 @@ with sync_playwright() as p:
  page.on('pageerror',lambda e:(errors.append(str(e)),print('PAGE ERROR '+str(e),flush=True)));page.on('console',lambda m:(errors.append(m.text),print('CONSOLE ERROR '+m.text,flush=True)) if m.type=='error' else None)
  page.add_init_script('const raf=requestAnimationFrame.bind(window);window.requestAnimationFrame=fn=>raf(t=>{if(!window.__freeze)fn(t)});')
  page.goto('http://127.0.0.1:5173/',wait_until='domcontentloaded',timeout=240000)
+ start_trip(page,'helicopter')
  page.wait_for_function('!!window.__portalQA||!!document.querySelector("#startup-error")?.textContent',timeout=240000)
  error=page.locator('#startup-error').text_content();assert not error,error
  print('BOOT READY',flush=True)
  page.evaluate('const q=__portalQA,original=q.renderer.render.bind(q.renderer);q.renderer.render=(...a)=>{if(!window.__skipRender)original(...a)};window.__skipRender=true')
- page.locator('#start').click(timeout=240000);page.locator('[data-mode="helicopter"]').click();page.locator('#begin-prep').click();page.wait_for_function('__portalQA.phase==="world"')
  page.evaluate('window.__freeze=true;__portalQA.renderer.shadowMap.enabled=false;__portalQA.renderer.setPixelRatio(.55);__portalQA.camera.far=180;__portalQA.camera.updateProjectionMatrix()')
  initial=page.evaluate('''()=>{const q=__portalQA,s=q.traffic.getState();return {...s,appearances:q.villages.residents.map(r=>r.model.appearance),mainColor:q.vehicle.paintColor,bridge:q.data.BRIDGE,roles:[...new Set(s.agents.map(a=>a.role))]};}''');print('INITIAL '+json.dumps(initial),flush=True)
  assert len(initial['agents'])==9 and len(initial['roles'])==3 and initial['routeFailures']==0,initial

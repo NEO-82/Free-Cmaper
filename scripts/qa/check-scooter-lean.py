@@ -1,3 +1,4 @@
+from direct_launch import start_trip
 """Exercise scooter steering and inward banking through the real player controls."""
 from playwright.sync_api import sync_playwright
 from pathlib import Path
@@ -8,10 +9,10 @@ with sync_playwright() as p:
  page.add_init_script('const raf=requestAnimationFrame.bind(window);window.requestAnimationFrame=fn=>raf(t=>{if(!window.__freeze)fn(t)});')
  page.route('**/@vite/client',lambda r:r.fulfill(body='',content_type='application/javascript'))
  page.goto('http://127.0.0.1:5173/',wait_until='domcontentloaded',timeout=240000)
+ start_trip(page,'scooter')
  page.wait_for_function('!!window.__portalQA||!!document.querySelector("#startup-error")?.textContent',timeout=240000)
  assert not page.locator('#startup-error').text_content()
  page.evaluate('const q=__portalQA,render=q.renderer.render.bind(q.renderer);window.__skipRender=true;q.renderer.render=(...a)=>{if(!window.__skipRender)render(...a)}')
- page.locator('#start').click(timeout=240000);page.locator('[data-mode="scooter"]').click();page.locator('#begin-prep').click()
  page.evaluate('window.__freeze=true;const q=__portalQA,s=q.vehicle.state;window.__start={...s};q.player.position.set(s.x-3,s.bodyY,s.z)')
  page.keyboard.press('f');assert page.evaluate('__portalQA.driving')
  results=[]

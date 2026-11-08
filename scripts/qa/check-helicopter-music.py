@@ -1,3 +1,4 @@
+from direct_launch import start_trip
 from playwright.sync_api import sync_playwright
 import json
 with sync_playwright() as p:
@@ -7,11 +8,11 @@ with sync_playwright() as p:
  page.add_init_script('const raf=requestAnimationFrame.bind(window);window.requestAnimationFrame=fn=>raf(t=>{if(!window.__freeze)fn(t)});')
  page.route('**/@vite/client',lambda route:route.fulfill(body='',content_type='application/javascript'))
  page.goto('http://127.0.0.1:5173/',wait_until='domcontentloaded',timeout=240000)
+ start_trip(page,'helicopter')
  page.wait_for_function('!!window.__portalQA||!!document.querySelector("#startup-error")?.textContent',timeout=240000)
  assert not page.locator('#startup-error').text_content()
  print('BOOT READY',flush=True)
  page.evaluate('window.__skipRender=true;const q=__portalQA,render=q.renderer.render.bind(q.renderer);q.renderer.render=(...args)=>{if(!window.__skipRender)render(...args)}')
- page.locator('#start').click(timeout=240000);page.locator('[data-mode="helicopter"]').click();page.locator('#begin-prep').click()
  page.evaluate('window.__freeze=true;const q=__portalQA,s=q.vehicle.state;window.__heliStart={...s};q.player.position.set(s.x-5,s.bodyY,s.z)')
  page.keyboard.press('f');assert page.evaluate('__portalQA.driving'),'F boards helicopter'
  page.keyboard.press('g');assert page.evaluate('__portalQA.driving'),'G has no exit action'

@@ -19,10 +19,8 @@ with sync_playwright() as p:
  capture('camper-title-desktop.png')
  page.set_viewport_size({'width':390,'height':844});capture('camper-title-mobile.png')
  page.set_viewport_size({'width':1280,'height':720});capture('camper-title-laptop.png')
- page.locator('#start').click();assert page.locator('#title-screen').evaluate('(s)=>s.classList.contains("hidden")')
- assert page.locator('#home').is_visible()
- page.locator('#prep-back').click();assert page.locator('#title-screen').is_visible()
+ assert page.locator('#title-screen #species').is_visible() and page.locator('#title-screen #travel').is_visible() and page.locator('#launch-weather').is_visible()
  page.locator('#title-options').click();assert page.locator('#options-modal').is_visible()
  assert not requests and not errors,{'requests':requests,'errors':errors}
- print(json.dumps({**result,'desktop':'1440x900','laptop':'1280x720','mobile':'390x844','startBackOptions':True,'networkRequests':len(requests),'errors':errors},ensure_ascii=False),flush=True)
+ print(json.dumps({**result,'desktop':'1440x900','laptop':'1280x720','mobile':'390x844','directTitleChoicesAndOptions':True,'networkRequests':len(requests),'errors':errors},ensure_ascii=False),flush=True)
  b.close()

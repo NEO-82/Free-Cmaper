@@ -1,3 +1,5 @@
+import {createTitleLauncher} from './title-launcher.js';
+import {terrainCameraTarget,recenterVehicleCamera,groundCameraDirection} from './terrain-vehicle-camera.js';
 import titleSunsetArtwork from '../assets/title-sunset-camp.webp?inline';
 import {HELICOPTER_CONFIG,stepHelicopter} from './helicopter-flight.js';
 import {createCampingMusic} from './camping-music-audio.js';
@@ -8,8 +10,9 @@ import {tunnelArchCeiling,tunnelPortalCut,createTunnelPortalPlanes,canCarveTunne
 // Restored from verified release b69df5e; preserves the complete lake, helicopter and vehicle edition.
 import {addPortalFoundation,isWithinTunnelCut} from './tunnel-portal-ground.js';
 try {
-  (function() {
+  (async function() {
     "use strict";
+    const launchTiming={script:performance.now()};
     const Cu = "attached", ip = "detached", Ke = "srgb", nr = "srgb-linear", Hs = "linear", ze = "srgb", Ru = "300 es";
     class ir {
       addEventListener(t, e) {
@@ -13747,13 +13750,7 @@ void main() {
       }
       return { x: n.x + r * u, y: n.y + s * u, z: n.z + c * u };
     }
-    function a1(n, t, e, i = 0, delay = .2) {
-      if (Math.abs(i) <= 0.1) return n;
-      const o = Math.min(Math.max(0, t), Math.max(0, e - delay));
-      if (!o) return n;
-      const r = Math.exp(-8 * o), s = Math.atan2(Math.sin(n.yaw), Math.cos(n.yaw));
-      return { ...n, yaw: Math.abs(s) < 1e-4 ? 0 : s * r, pitch: Math.abs(n.pitch - 0.32) < 1e-4 ? 0.32 : 0.32 + (n.pitch - 0.32) * r };
-    }
+    function a1(n,t,e,i=0,delay=1,target={yaw:0,pitch:.32}) {return recenterVehicleCamera(n,t,e,i,{delay,target});}
     function c1(n) {
       const t = n.pitch - 0.32;
       return { x: Math.sin(n.yaw) * Math.cos(t), y: -Math.sin(t), z: Math.cos(n.yaw) * Math.cos(t) };
@@ -15267,9 +15264,11 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
           }
         }
       }
+      const visitedTunnelPixels=new Uint8Array(w*w);
       for (const k of Xi) for (let Z = 1; Z < k.track.length; Z++) {
         const et = k.track[Z - 1], ut = k.track[Z], st = 24, vt = Math.max(0, Math.floor((Math.min(et.x, ut.x) - st - dt.minX) / D * w)), Yt = Math.min(w - 1, Math.ceil((Math.max(et.x, ut.x) + st - dt.minX) / D * w)), U = Math.max(0, Math.floor((Math.min(et.z, ut.z) - st - dt.minZ) / z * w)), Nt = Math.min(w - 1, Math.ceil((Math.max(et.z, ut.z) + st - dt.minZ) / z * w));
         for (let zt = U; zt <= Nt; zt++) for (let bt = vt; bt <= Yt; bt++) {
+          const pixel=zt*w+bt;if(visitedTunnelPixels[pixel])continue;visitedTunnelPixels[pixel]=1;
           const Pt = dt.minX + (bt + 0.5) / w * D, le = dt.minZ + (zt + 0.5) / w * z, tt = Nl(Pt, le);
           if (!Number.isFinite(tt)) continue;
           const pt = (zt * w + bt) * 4, Ot = Math.max(R[pt] * 256 + R[pt + 1], Math.round(tt / 512 * 65535));
@@ -15435,7 +15434,7 @@ vec4 portal=texture2D(portalMask,(vTunnelWorld.xz-portalBounds.xy)/portalBounds.
       }
       return n.computeVertexNormals(), Us(n, "#ad6e49", "#ffe0ac");
     }
-    function x_(n) {
+    async function x_(n,launch) {
       xd(null);
       let t = null;
       const e = new Qt();
@@ -15457,6 +15456,7 @@ vec4 portal=texture2D(portalMask,(vTunnelWorld.xz-portalBounds.xy)/portalBounds.
       for (let I = 0; I < S.count; I++) {
         const G = _[I % _.length], H = M[Math.floor(I / _.length)];
         S.setXYZ(I, G, Jd(G, H), H), E.setXY(I, (G - Pe.minX) / l, (Pe.maxZ - H) / u);
+        if(I%16384===0)await new Promise(resolve=>setTimeout(resolve,0));
       }
       v.setAttribute("color", new Qe(T, 3)), v.computeVertexNormals();
       const C = Cn(e, v, g, 0, 0, 0);
@@ -15488,6 +15488,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
         const G = Cn(e, new Po(I.radius, 96), Z, I.x, I.height, I.z);
         G.rotation.x = -Math.PI / 2, G.name = "summit-campsite", G.castShadow = false;
       }
+      await launch?.stage(Xe.language==='en'?'Connecting roads and tunnels…':'도로와 터널을 연결하고 있어요…',2);
       const et = xf.flatMap((I) => I.track), ut = h_(e, C, { heightAt: Y });
       o.push(...ut.colliders);
       function st(I, G) {
@@ -15498,6 +15499,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
       function Yt(I, G) {
         return wi.some((H) => Math.hypot(I - H.x, G - H.z) < H.radius + 15) || $l(I, G) || ql(I, G, 12) || mf(I, G) || Jl(I, G) < 70 || mo(I, G) || vt.some((H) => Math.hypot(I - H.x, G - H.z) < H.r + 3) || gf.some((H) => Math.abs(I - H.x) < 23 && Math.abs(G - H.z) < 24) || Ql.some((H) => Math.hypot(I - H.x, G - H.z) < H.radius + 7) || st(I, G);
       }
+      await launch?.stage(Xe.language==='en'?'Preparing forests and meadows…':'숲과 풀밭을 준비하고 있어요…',3);
       const U = Us(new Be(0.62, 1, 1, 10, 3), "#ab8140", "#ffdc90"), Nt = new Be(0.13, 0.25, 1, 6), zt = vf(), bt = vf(true), Pt = 18e3, le = 6, tt = 5, pt = 16, Ot = new Be(1, 1, 1, 12), Gt = [], F = /* @__PURE__ */ new Map();
       function P(I, G) {
         const H = Math.floor(I / 8), $ = Math.floor(G / 8);
@@ -15694,7 +15696,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
       for (const I of c) I.type === "plant" && I.object.traverse((G) => {
         G.isMesh && t.maskMesh(G);
       });
-      xc(0);
+      // The selected season is applied once by Hf before the world is displayed.
       function j(I, G, H = Ri) {
         qt(H), Ct(H), ut.update(H), D.value = G, k.update(G), _t.update(G, H);
         for (let $ = a.length - 1; $ >= 0; $--) {
@@ -16510,7 +16512,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
     } catch {
     }
     const jt = (n) => B1(n, Xe.language);
-    let kn = 0, Zi = "sedan", xn = false, Rn = false, un = 0, Xo = 18e4, ge = null, su = false, tc = false, Pi = false, Ze = false, jn = false, nn = "stand", ji = 0, mi = { yaw: 0, pitch: 0.32 }, au = 0, kr = null, ye = 0, Se = 0.32, Di = 9.5, Pn = "clear", cu = -1, lu = 0, Oe = /* @__PURE__ */ new Map();
+    let kn = 0, Zi = "sedan", xn = false, Rn = false, un = 0, Xo = 18e4, ge = null, su = false, tc = false, Pi = false, Ze = false, jn = false, nn = "stand", ji = 0, mi = { yaw: 0, pitch: 0.32 }, au = 0, kr = null, ye = 0, Se = 0.32, Di = 9.5, Pn = "clear", cu = 0, lu = 0, Oe = /* @__PURE__ */ new Map();
     const If = /* @__PURE__ */ new Set(), ue = /* @__PURE__ */ new Set();
     let ec = { ...Ja }, uu = { ...Ja }, Bn = false, we = "outdoor", nc = -1e3, gi = null, vo = null, ic = 0, Ki = null, hu = false, Gn = true, Yo = 0, ae = null, vn = false, Ge = null, Br = ka();
     try {
@@ -16550,6 +16552,12 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
 <label class="setting language-setting" for="language"><span data-i18n="language"></span><select id="language"><option value="ko">\uD55C\uAD6D\uC5B4</option><option value="en">English</option></select></label>
 <h3 data-i18n="controls"></h3><div class="control-grid">${[["W A S D", "move"], ["Mouse", "look"], ["Space", "jump"], ["Left Shift", "run"], ["Left Ctrl", "sneak"], ["C", "crouch"], ["V", "prone"], ["B", "backpack"], ["F", "interact"], ["Q / Space", "dive"], ["M", "worldMap"], ["ESC", "pause"]].map(([n, t]) => `<div><kbd>${n}</kbd><span data-i18n="${t}"></span></div>`).join("")}</div><p class="small" data-i18n="controlsNote"></p><div id="save-warning" class="small" role="status"></div></section></div>
 <div id="toast" class="toast hidden" role="status"></div>`;
+    const launcher=createTitleLauncher({translate:jt,formatTitle:n1,getOptions:()=>Xe,onOptions:value=>{Xe=sf(value);ie.setOptions(Xe);try{localStorage.setItem('free-camper-options',JSON.stringify(Xe));}catch{}},onLaunch:()=>ie.unlock()});
+    launchTiming.title=performance.now();
+    if(import.meta.env.DEV)window.__launchQA={get timing(){return {...launchTiming};},get phase(){return Ji;}};
+    const launchChoice=await launcher.started;
+    kn=launchChoice.season;Zi=launchChoice.kind;launchTiming.worldStart=performance.now();
+    await launcher.stage(Xe.language==='en'?'Preparing the island and roads…':'섬과 도로를 준비하고 있어요…',1);
     const Ee = new eh();
     Ee.background = new Kt("#acc4c0"), Ee.fog = new ca("#b5c6bd", 6e-3);
     const je = new Uv({ antialias: true, logarithmicDepthBuffer: true });
@@ -16562,15 +16570,20 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
       const s = new Jt(n, new se({ color: t, roughness: 0.85 }));
       return s.position.set(e, i, o), s.castShadow = true, s.receiveShadow = true, r.add(s), s;
     }
-    const Ve = x_(Ee), to = i_(Ee), J_ = G1(Ee), Vr = H1(Ee), Nf = w_(Ee), Q_ = g1(Ee), du = S1(Ee), Of = [];
+    const Ve = await x_(Ee,launcher);
+    launchTiming.landscape=performance.now();
+    await launcher.stage(Xe.language==='en'?'Preparing villages and campsites…':'마을과 캠핑 장소를 준비하고 있어요…',5);
+    const to = i_(Ee), J_ = G1(Ee), Vr = H1(Ee), Nf = w_(Ee), Q_ = g1(Ee), du = S1(Ee), Of = [];
     to.root.traverse((n) => {
       n.name === "village plaza" && Of.push(n);
     });
     const kf = jd([...du.group.children.filter((n) => ["mainland parking", "mainland parking rear", "bridge deck"].includes(n.name)), ...Of]), tM = rf(ft("#world-map-canvas")), eM = rf(ft("#mini-map"), { size: 480, labels: false }), Kn = fi.map((n) => V_(Ee, { x: n.x, y: Me(n.x, n.z), z: n.z }));
+    await launcher.stage(Xe.language==='en'?'Preparing your map and neighbours…':'지도와 주민들을 준비하고 있어요…',6);
     const residentTraffic=createResidentTraffic({scene:Ee,villages:to,data:Qv,createVehicle:D1,world:Ve});
     let Ii = Kn[0], fu = 82;
     const Hr = () => (fu = fu * 16807 % 2147483647, (fu - 1) / 2147483646), hn = Ya(Ee), lt = hn.root;
     lt.position.set(Dr.x, Me(Dr.x, -12), -12);
+    hn.configure({species:launchChoice.species});
     const Jn = new eh();
     Jn.fog = new ca("#c88975", 35e-4);
     const sc = new yn(48, innerWidth / innerHeight, 0.1, 700);
@@ -16640,6 +16653,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
     function Hf() {
       Ve.updateSeason(kn), Xr.material.color.set(["#f6d4df", "#c0dce8", "#e4ad61", "#ffffff"][kn]);
     }
+    await launcher.stage(Xe.language==='en'?'Setting the season and weather…':'계절과 날씨를 준비하고 있어요…',7);
     Hf();
     function ne(n) {
       ft("#toast").textContent = jt(n), ft("#toast").classList.remove("hidden"), clearTimeout(ne.timer), ne.timer = setTimeout(() => ft("#toast").classList.add("hidden"), 4500);
@@ -16674,10 +16688,10 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
     ft("#title-options").onclick = ft("#game-options").onclick = () => $r("options"), ft("#options-close").onclick = () => Mo("options"), ft("#backpack-close").onclick = () => Mo("backpack"), ft("#shop-close").onclick = () => Mo("shop"), ft("#backpack-toggle").onclick = () => {
       xn && !jn && $r("backpack");
     }, ft("#start").onclick = () => {
-      ie.unlock(), Ji = "setup", Gn = true, ft("#title-screen").classList.add("hidden"), ft("#home").classList.remove("hidden"), ft("#species").focus();
+      ft("#begin-prep").click();
     }, ft("#begin-prep").onclick = () => {
       const n = b1(Zi);
-      Ji = "world", we = "outdoor", xn = true, Rn = false, Ee.add(lt), lt.position.set(n.x, Me(n.x, n.z), n.z), lt.position.y = ti(), ae = Ps(lt.position), ye = -Math.PI / 2, Se = 0.32, lt.rotation.y = Math.PI / 2, y1.forEach((t) => Oe.set(t, 1)), hn.backpack.visible = true, Tt = (Zi === "helicopter" ? e1 : D1)(Ee, ...Zi === "helicopter" ? [] : [Zi], Yl, Math.PI / 2, { heightAt: (t, e, i) => yu(t, e, i ?? Tt?.state.bodyY ?? Me(t, e)) }), un = 0, cu = lu = 0, Gr = jl(kn), Pn = Gr.kind, ft("#home").classList.add("hidden"), ft("#hud").classList.remove("hidden"), document.activeElement?.blur(), Qn(), Bs(), Li(), qe(), ne("islandWelcome");
+      Ji = "world", we = "outdoor", xn = true, Rn = false, Ee.add(lt), lt.position.set(n.x, Me(n.x, n.z), n.z), lt.position.y = ti(), ae = Ps(lt.position), ye = -Math.PI / 2, Se = 0.32, lt.rotation.y = Math.PI / 2, y1.forEach((t) => Oe.set(t, 1)), hn.backpack.visible = true, Tt = (Zi === "helicopter" ? e1 : D1)(Ee, ...Zi === "helicopter" ? [] : [Zi], Yl, Math.PI / 2, { heightAt: (t, e, i) => yu(t, e, i ?? Tt?.state.bodyY ?? Me(t, e)) }), un = 0, cu = lu = 0, Gr = launchChoice.weather === "random" ? jl(kn) : Ds(launchChoice.weather === "rain" && kn === 3 ? "snow" : launchChoice.weather), Pn = Gr.kind, ft("#title-screen").classList.add("hidden"), ft("#home").classList.add("hidden"), ft("#hud").classList.remove("hidden"), document.activeElement?.blur(), Qn(), Bs(), Li(), qe(), ne("islandWelcome");
     }, ft("#species").addEventListener("change", () => {
       const n = { species: ft("#species").value };
       hn.configure(n), $o.configure(n), Ci($o, "sit"), Gn = true;
@@ -17228,8 +17242,8 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
         a.lerpVectors(ke.cameraStart, a, zn.smoothstep(ke.progress, 0, 0.2)), Wt.position.lerpVectors(a, l, s);
         const u = Se - 0.32, p = l.clone().add(new B(-Math.sin(ye) * Math.cos(u) * 5, -Math.sin(u) * 5, -Math.cos(ye) * Math.cos(u) * 5)), d = lt.position.clone().add(new B(0, 0.9, -1.2).applyAxisAngle(new B(0, 1, 0), ge.group.rotation.y));
         d.lerpVectors(ke.viewStart, d, zn.smoothstep(ke.progress, 0, 0.2)), Wt.lookAt(d.lerp(p, s)), lt.visible = ke.progress > 0.12 && s < 0.78;
-      } else if (ve) if (Dn() && (mi = a1(mi, t, (n - au) / 1e3, Math.hypot(Tt.state.speed, Tt.state.vy ?? 0), Tt.state.kind === "helicopter" ? HELICOPTER_CONFIG.cameraReturnDelay : .2)), ye = Tt.state.heading - Math.PI + mi.yaw, Se = mi.pitch, $a(Di)) {
-        const s = P_(Tt.state.kind), c = new B(s.x, s.y, s.z).applyQuaternion(Tt.root.quaternion).add(Tt.root.position), a = c1(mi), l = new B(a.x, a.y, a.z).applyQuaternion(Tt.root.quaternion);
+      } else if (ve) if (Dn() && (mi = a1(mi, t, (n - au) / 1e3, Math.hypot(Tt.state.speed, Tt.state.vy ?? 0), Tt.state.kind === "helicopter" ? HELICOPTER_CONFIG.cameraReturnDelay : 1,Tt.state.kind === "helicopter" ? undefined : terrainCameraTarget(Tt.state,{roadAt:cn,heightAt:yu}))), ye = Tt.state.heading - Math.PI + mi.yaw, Se = mi.pitch, $a(Di)) {
+        const s = P_(Tt.state.kind), c = new B(s.x, s.y, s.z).applyQuaternion(Tt.root.quaternion).add(Tt.root.position), a = c1(mi), l = Tt.state.kind === "helicopter" ? new B(a.x,a.y,a.z).applyQuaternion(Tt.root.quaternion) : new B().copy(groundCameraDirection(Tt.state,mi));
         Wt.position.copy(c), Wt.lookAt(c.clone().add(l)), lt.visible = false;
       } else {
         const s = r1(Tt.state, { ...mi, distance: Di * (Tt.state.kind === "scooter" ? 1.05 : 1.47) }), c = Ko().filter((l) => l.id !== "player-vehicle" && (l.kind === "circle" ? Math.hypot(l.x - s.focus.x, l.z - s.focus.z) < l.radius + 50 : l.maxX > s.focus.x - 50 && l.minX < s.focus.x + 50 && l.maxZ > s.focus.z - 50 && l.minZ < s.focus.z + 50)), a = s1(s.focus, s.position, { groundHeight: (l, u) => yu(l, u, Tt.state.bodyY), ceilingHeight: (l, u) => Cs(l, u, Tt.state.bodyY), blocked: (l, u, p) => c.some((d) => u > (d.minY ?? -1 / 0) - 0.2 && u < (d.maxY ?? 1 / 0) + 0.2 && Yi(l, p, 0.25, d)) });
@@ -17274,8 +17288,11 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
         n.aspect = innerWidth / innerHeight, n.updateProjectionMatrix();
       }), je.setSize(innerWidth, innerHeight);
     }), xu(), Wf(), requestAnimationFrame(np);
-    if(import.meta.env.DEV)window.__portalQA={renderer:je,scene:Ee,player:lt,advanceFlight:(dt)=>fM(dt,performance.now(),dt),advanceFrame:np,camera:Wt,world:Ve,villages:to,traffic:residentTraffic,residentConstructors,audio:ie,stepHelicopter:t1,stepGroundVehicle:R1,cameraReturn:a1,get cameraOrbit(){return {...mi};},look:Mu,data:Qv,createVehicle:D1,createHelicopter:e1,tunnels:Xi,bounds:dt,roadSurfaceAt:cn,portalCutHeight:ff,Vector3:B,Raycaster:Im,get phase(){return Ji;},get driving(){return ve;},get vehicle(){return Tt;},get elapsed(){return un;}};
-  })();
+    if(import.meta.env.DEV)window.__portalQA={renderer:je,scene:Ee,player:lt,advanceFlight:(dt)=>fM(dt,performance.now(),dt),advanceFrame:np,camera:Wt,world:Ve,villages:to,traffic:residentTraffic,residentConstructors,audio:ie,stepHelicopter:t1,stepGroundVehicle:R1,cameraReturn:a1,get cameraOrbit(){return {...mi};},look:Mu,data:Qv,createVehicle:D1,createHelicopter:e1,tunnels:Xi,bounds:dt,roadSurfaceAt:cn,portalCutHeight:ff,Vector3:B,Raycaster:Im,get phase(){return Ji;},get selectedCharacter(){return hn.settings.species;},get driving(){return ve;},get vehicle(){return Tt;},get elapsed(){return un;}};
+    await launcher.stage(Xe.language==='en'?'Ready to go!':'출발 준비가 끝났어요!',8);
+    launcher.finish();ft('#begin-prep').click();
+    launchTiming.ready=performance.now();
+  })().catch(error=>window.showStartupFailure(error));
   document.getElementById("startup").hidden = true;
 } catch (error) {
   window.showStartupFailure(error);

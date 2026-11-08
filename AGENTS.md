@@ -17,13 +17,20 @@
 ## Camping music and helicopter flight (2026-11-04)
 
 - Current music is `src/camping-music-score.js` (ten original 300-second scores) and `src/camping-music-audio.js` (32-bit float stereo Web Audio instruments, shuffled ten-track playlist, 3-second equal-power crossfades). The old bundled short/16-voice music loop has been removed. Keep character and vehicle effects in the current entry.
-- `src/helicopter-flight.js` is authoritative for 117.6m/s flight, four skid-contact ground fitting, continuous descent-assisted landing, five-second engine shutdown and rotor RPM. F boards/exits; G has no action. Camera delay is seven seconds for helicopters, 0.2 for ground vehicles, with no return at rest.
+- `src/helicopter-flight.js` is authoritative for 117.6m/s flight, four skid-contact ground fitting, continuous descent-assisted landing, five-second engine shutdown and rotor RPM. F boards/exits; G has no action. Camera delay is seven seconds for helicopters, 1 second for ground vehicles, with no return at rest.
 - QA: `scripts/qa/check-camping-music.py` renders all ten Float32 stereo excerpts and a complete five-minute track plus crossfade; `scripts/qa/check-helicopter-music.py` exercises real mouse/key inputs and terrain landing in the current game. Production strips development hooks.
 
 ## Illustrated title screen (2026-11-07)
 
 - `assets/title-sunset-camp.webp` is the new original 2D anime-style summit sunset campsite art: rear-view couple in chairs, tent and campfire. The balloon title text stays unchanged.
-- `src/current-game.js` imports it with `?inline` and puts it in the title screen CSS custom property; `index.html` has responsive backgrounds. Keep the image embedded in both builds so the standalone HTML works offline. Title-only frames skip the covered 3D preview; setup still renders its preview.
+- `src/current-game.js` imports it with `?inline` and puts it in the title screen CSS custom property; `index.html` has responsive backgrounds. Keep the image embedded in both builds so the standalone HTML works offline. Current launch choices stay on the illustration; do not restore the legacy 3D setup screen.
 - `scripts/qa/check-title-artwork.py` checks the actual offline bundle at desktop/laptop/mobile sizes, unchanged title, decoded embedded image, menu transitions, zero network requests/errors and absence of dev hooks.
 
 - Scooter inward banking (2026-11-07): keep steering inputs unchanged. In current-game.js `ef`, two-wheel dynamic roll uses -0.013 times speed*yawRate so the bike/rider lean into turns. Other vehicle roll terms stay unchanged. `scripts/qa/check-scooter-lean.py` checks real A/D/arrow controls, inward lean, rider orientation and recovery.
+
+## Direct launch, startup and road camera (2026-11-08)
+
+- `src/title-launcher.js` mounts all trip choices on the illustrated title before the WebGL world exists. Wait for its started promise, keep options usable before launch, then build and enter the world directly. Main initialization and x_ are async; preserve the catch path for initialization failures.
+- The 4096² tunnel mask uses visitedTunnelPixels to compute the globally maximal Nl ceiling once per pixel; preserve full grid resolution and all seals/floors. Selected season coloring happens once through Hf.
+- `src/terrain-vehicle-camera.js` sets ground vehicle camera heading/grade from road and rendered terrain, not chassis oscillations. Ground delay1s, helicopter7s, no return at rest. First-person ground view uses world direction while seat location still follows the vehicle.
+- `scripts/qa/direct_launch.py` replaces the old two-screen start flow for live QA. Use polling=100 for async readiness if test RAF is disabled. `check-launch-and-camera.py` covers the new flow and camera; `check-current-offline.py` checks standalone/offline startup.

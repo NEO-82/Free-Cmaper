@@ -7,7 +7,7 @@ with sync_playwright() as p:
  page.on('pageerror',lambda e:errors.append(str(e)));page.on('request',lambda r:requests.append(r.url))
  page.evaluate('window.requestAnimationFrame=()=>0')
  page.set_content(Path('dist-offline/Free-Camper.html').read_text(),wait_until='domcontentloaded',timeout=240000)
- page.evaluate('document.querySelector("#start").click();document.querySelector("[data-mode=helicopter]").click();document.querySelector("#begin-prep").click()')
+ page.evaluate('document.querySelector("[data-mode=helicopter]").click();document.querySelector("#start").click()')
  page.locator('#clock').wait_for(state='visible',timeout=240000)
  assert page.locator('#missions').count()==0
  assert page.evaluate('typeof window.__portalQA')=='undefined'
