@@ -3,6 +3,13 @@ export function tunnelArchCeiling(floor,lateral){
  const r=Math.abs(lateral)/TUNNEL_HALF_WIDTH;
  return r>=1?-Infinity:floor+5.8+4.8*Math.sqrt(1-r*r)+.1;
 }
+// A 4096px mask texel spans roughly 3m in this world. Excavate beyond the
+// visible lining so nearest-texel sampling cannot leave terrain inside it.
+// This stays inside the 20m outer rock backing and preserves the road floor.
+export function tunnelExcavationCeiling(floor,lateral){
+ const r=Math.abs(lateral)/19;
+ return r>=1?-Infinity:floor+5.8+5.5*Math.sqrt(1-r*r)+.1;
+}
 export function tunnelPortalCut(portal,x,z){
  const dx=x-portal.x,dz=z-portal.z,c=Math.cos(portal.heading),s=Math.sin(portal.heading),lateral=c*dx-s*dz,longitudinal=s*dx+c*dz;
  return longitudinal< -3||longitudinal>6?-Infinity:tunnelArchCeiling(portal.y,lateral);

@@ -55,3 +55,9 @@
 - `src/vehicle-suspension.js` owns per-kind weight/impulse/frequency/damping. Current ef supplies attitude targets only. Grounded recovery is strongly damped and cannot rebound above tyre support. Airborne attitude keeps inertia instead of chasing the ground, and vertical gravity belongs only to vehicle-jump.js.
 - `src/vehicle-jump.js` compresses on landing, clears stale ground momentum/angular kick, and uses a0.35s settling period. Settling prevents spring re-launch but must never suppress falling off a real drop. Preserve water support and stream crossing.
 - `tests/vehicle-weight.test.js` checks landing, settling, mass response and real support loss. `check-vehicle-water.py` now checks all four actual chassis plus real R-key landing and prior water recovery in one browser session.
+
+## Tunnel and stream clearance (2026-11-08)
+
+- `src/stream-clearance.js` carves the FINAL rendered terrain after Jd/road/campsite grading. Keep the triangle footprint and downhill elevation allowance: carving only analytical terrain lets mesh interpolation obstruct the stream. This operation only lowers terrain; preserve watershed points/lakes/waterfall and sea outlet.
+- `tunnelExcavationCeiling` deliberately exceeds the visible 17m inner arch to cover mask texel quantization, staying within the 20m rock backing. Preserve floor2.48 threshold and finite portal planes. Nature spawning uses a30m tunnel exclusion including canopy/rock footprint and portal ground mismatches.
+- `scripts/qa/check-corridor-clearance.py` checks the actual water mesh, coast outlet, every tunnel's interior mask and all prop colliders. Also run `check-tunnel-portals.py` for all20 portal floors and rendering.

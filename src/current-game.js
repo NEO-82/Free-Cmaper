@@ -1,3 +1,4 @@
+import {createStreamClearance} from './stream-clearance.js';
 import {stepWeightedSuspension,vehicleWeight} from './vehicle-suspension.js';
 import {vehicleWaterSupport,vehicleWaterState} from './vehicle-water.js';
 import {stepVehicleJump} from './vehicle-jump.js';
@@ -11,7 +12,7 @@ import {HELICOPTER_CONFIG,stepHelicopter} from './helicopter-flight.js';
 import {createCampingMusic} from './camping-music-audio.js';
 import {createResidentModel,randomizeVehiclePaint} from './resident-appearance.js';
 import {createResidentTraffic} from './resident-traffic.js';
-import {tunnelArchCeiling,tunnelPortalCut,createTunnelPortalPlanes,canCarveTunnelSegment,addTunnelMountainSeals,TUNNEL_FLOOR} from './tunnel-mountain-seal.js';
+import {tunnelExcavationCeiling,tunnelPortalCut,createTunnelPortalPlanes,canCarveTunnelSegment,addTunnelMountainSeals,TUNNEL_FLOOR} from './tunnel-mountain-seal.js';
 // Includes Three.js, MIT licensed; see assets/THREE-MIT.txt.
 // Restored from verified release b69df5e; preserves the complete lake, helicopter and vehicle edition.
 import {addPortalFoundation,isWithinTunnelCut} from './tunnel-portal-ground.js';
@@ -13501,7 +13502,7 @@ void main() {
       for (const i of Ir.get(`${Math.floor(n / Ti)}:${Math.floor(t / Ti)}`) ?? []) {
         if (!i.tunnel||!canCarveTunnelSegment(i,tunnelPortalPlanes.get(i.tunnelId),n,t)) continue;
         const { a: o, b: r } = i, s = r.x - o.x, c = r.z - o.z, a = yi(((n - o.x) * s + (t - o.z) * c) / (s * s + c * c || 1), 0, 1);
-        e = Math.max(e,tunnelArchCeiling(o.y+(r.y-o.y)*a,Math.hypot(n-o.x-a*s,t-o.z-a*c)));
+        e = Math.max(e,tunnelExcavationCeiling(o.y+(r.y-o.y)*a,Math.hypot(n-o.x-a*s,t-o.z-a*c)));
       }
       return e;
     }
@@ -15462,9 +15463,10 @@ vec4 portal=texture2D(portalMask,(vTunnelWorld.xz-portalBounds.xy)/portalBounds.
       const _ = h(Pe.minX, Pe.maxX), M = h(Pe.minZ, Pe.maxZ), v = new $n(l, u, _.length - 1, M.length - 1);
       v.rotateX(-Math.PI / 2);
       const S = v.attributes.position, E = v.attributes.uv, T = new Float32Array(S.count * 3);
+      const clearStream = createStreamClearance(Ei.points, Md);
       for (let I = 0; I < S.count; I++) {
         const G = _[I % _.length], H = M[Math.floor(I / _.length)];
-        S.setXYZ(I, G, Jd(G, H), H), E.setXY(I, (G - Pe.minX) / l, (Pe.maxZ - H) / u);
+        S.setXYZ(I, G, clearStream(G, H, Jd(G, H)), H), E.setXY(I, (G - Pe.minX) / l, (Pe.maxZ - H) / u);
         if(I%16384===0)await new Promise(resolve=>setTimeout(resolve,0));
       }
       v.setAttribute("color", new Qe(T, 3)), v.computeVertexNormals();
@@ -15502,7 +15504,9 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
       o.push(...ut.colliders);
       function st(I, G) {
         const H = cn(I, G);
-        return H.distance < 19 && (!H.tunnel || zs(I, G) < H.height + 11);
+        // Keep the entire tree canopy / largest rock footprint outside a tunnel,
+        // including mouths where natural terrain differs from the rendered floor.
+        return H.distance < (H.tunnel ? 30 : 19);
       }
       const vt = [{ x: -58, z: -37, r: 6.2 }, { x: -72, z: -45, r: 8.2 }, { x: -64, z: -59, r: 5.4 }];
       function Yt(I, G) {
