@@ -1,3 +1,22 @@
+# 차량 중량감·점프 착지 감쇠 수정 (2026-11-08)
+
+- 차종별 중량과 서스펜션 반응을 나누고 점프의 위로 솟는 힘을 조정했습니다. 캠핑카와SUV는 더 낮고 묵직하게, 스쿠터는 비교적 민첩하게 반응합니다.
+- 착지 시 차체가 눌린 뒤 천천히 복원되며, 위로 튕기는 반발과 연속 재도약을 억제했습니다.
+- 공중에서는 차체가 아래 지형 각도를 쫓아 스프링처럼 움직이지 않고 자세 관성을 유지합니다. 공중 조향도 줄였습니다.
+- 시냇물 점프와 물속 전진·후진/강둑 탈출은 유지합니다.
+
+최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip
+
+- src/vehicle-suspension.js: 차종별 weight profile(sedan1500/SUV2100/RV3600/scooter240kg), heave/attitude frequency와 임계보다 강한 감쇠. 기존 ef는 목표 pitch/roll만 계산하고 stepWeightedSuspension에 위임합니다. 중력은9.81을 유지합니다.
+- src/vehicle-jump.js: jumpSpeed sedan6.8/SUV6.4/RV5.7/scooter6.8, 착지 압축/0.35초 settling, 착지 시 과거 groundVerticalSpeed0과 각속도 축소. 압축은 약0.11~0.17m로 복원되며 접지 높이 위로 spring rebound하지 않습니다. 진짜 지지면이 사라지는 낙하는 settling 중에도 허용합니다.
+- 공중 수직 물리는 jump 모듈 한 곳에서 처리합니다. 공중 자세는 각속도를 감쇠하면서 유지하고 아래 지형의 pitch/roll 목표를 추적하지 않습니다. P1은 공중 조향18%와 차종별 작은 공기 저항을 적용합니다. 일반 지상 조작/최고속도/스쿠터 안쪽 기울기/도로 카메라는 유지합니다.
+- tests/vehicle-weight.test.js4개: 차종별 반응/1회 착지/반발0/복원, 착지 관성 초기화, 공중 자세, 착지 직후 절벽 낙하. 기존 jump 테스트의 높이 범위는 낮아진 반응에 맞췄습니다.
+- scripts/qa/check-vehicle-water.py는4종 실제 R1 점프에서 착지1/재도약0/반발0/압축 약.11~.17m를 확인하고, 실제SUV R키에서도 동일하게 검증합니다. 실제 시냇물4종 점프 waterImmersion0와 W/S 수중 탈출도 다시 통과했습니다. 오류0.
+- 최종 npm test169/169, build/build:offline 통과. 인터넷 차단 최종HTML의SUV 시작에서 HTTP요청0/실행오류0/개발 훅 제거를 확인했습니다.
+- 활성 진입점 src/current-game.js를 유지합니다. 물속 이동/경비행기/낙하산/좌석 적합/직접 타이틀/빠른 생성/음악10곡/기존 맵 기능은 포함합니다. 소스/테스트/실행ZIP을 함께 GitHub main에 저장하고 SHA고정 링크를 제공합니다.
+
+아래는 이전 기록입니다. 위 최신 안내를 우선합니다.
+
 # 차량 시냇물 점프·물에서 이동/탈출 (2026-11-08)
 
 - 공중에 있는 차량이 수심 판정에 막히지 않고 시냇물을 점프로 건너도록 수정했습니다. 수면 위에서는 물 저항이 점프 속도를 깎지 않습니다.

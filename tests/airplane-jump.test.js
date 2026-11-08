@@ -5,7 +5,7 @@ import {ejectFromAirplane,stepParachute,createParachute} from '../src/parachute.
 import {makeRiderMount,updateMountedRider,visibleRiderBounds,restoreRider} from '../src/rider-mount.js';
 const config={travel:.4},ground={height:0,wheels:[{},{},{},{}]};
 test('all ground vehicles jump on an edge, follow a gravity arc, land, and cannot jump twice while held',()=>{
- for(const kind of ['sedan','suv','motorhome','scooter']){let s={kind,bodyY:0,heaveVelocity:0,airborne:false},peak=0,landings=0;for(let i=0;i<480;i++){s=stepVehicleJump(s,{bodyY:0,heaveVelocity:0,pitch:0,roll:0},ground,1/120,config,{jump:true});peak=Math.max(peak,s.bodyY);if(s.landed)landings++;}assert.ok(peak>1.7&&peak<3.1);assert.equal(landings,1);assert.equal(s.airborne,false);assert.equal(s.bodyY,0);}
+ for(const kind of ['sedan','suv','motorhome','scooter']){let s={kind,bodyY:0,heaveVelocity:0,airborne:false},peak=0,landings=0;for(let i=0;i<480;i++){s=stepVehicleJump(s,{bodyY:0,heaveVelocity:0,pitch:0,roll:0},ground,1/120,config,{jump:true});peak=Math.max(peak,s.bodyY);if(s.landed)landings++;}assert.ok(peak>1.3&&peak<2.6);assert.equal(landings,1);assert.equal(s.airborne,false);assert.equal(s.bodyY,0);}
 });
 test('vehicle momentum carries it over a crest, gravity follows a drop, and a ceiling stops ascent',()=>{
  const s={kind:'sedan',bodyY:1,groundHeight:1,groundVerticalSpeed:4,heaveVelocity:4};const crest=stepVehicleJump(s,{bodyY:1,heaveVelocity:0},{...ground,height:.7},1/120,config);assert.ok(crest.airborne&&crest.bodyY>1);

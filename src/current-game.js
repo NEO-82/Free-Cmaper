@@ -1,3 +1,4 @@
+import {stepWeightedSuspension,vehicleWeight} from './vehicle-suspension.js';
 import {vehicleWaterSupport,vehicleWaterState} from './vehicle-water.js';
 import {stepVehicleJump} from './vehicle-jump.js';
 import {AIRPLANE_CONFIG,planeSpawn,stepAirplane,createAirplane} from './light-airplane.js';
@@ -13983,10 +13984,8 @@ void main() {
       const a = c.filter((g) => g.lz > 0), l = c.filter((g) => g.lz < 0), u = (g) => g.reduce((h, _) => h + _.height, 0) / g.length, p = -Math.atan2(u(a) - u(l), t.wheelBase), d = t.track ? u(c.filter((g) => g.lx > 0)) : e(n.x + s * i, n.z - r * i), f = t.track ? u(c.filter((g) => g.lx < 0)) : e(n.x - s * i, n.z + r * i), m = Math.atan2(d - f, i * 2), x = u(c);
       return { wheels: c, pitch: p, roll: m, height: x + t.wheelRadius * (1 - Math.cos(p) * Math.cos(m)) };
     }
-    function ef(n, t, e, i, { acceleration: o = 0, turnRate: r = 0 } = {}) {
-      const s = { bodyY: n.bodyY ?? t.height, heaveVelocity: n.heaveVelocity ?? 0, pitch: n.pitch ?? t.pitch, pitchVelocity: n.pitchVelocity ?? 0, roll: n.roll ?? t.roll, rollVelocity: n.rollVelocity ?? 0, airborne: n.airborne ?? false }, c = tf(t.pitch - o * 3e-3, -0.65, 0.65), a = (n.speed ?? 0) * r, l = tf(t.roll + a * (i.track ? -25e-4 : -0.013), -0.6, 0.6), u = Math.max(1, Math.ceil(Math.max(0, Math.min(e, 0.25)) * 120)), p = Math.max(0, Math.min(e, 0.25)) / u;
-      for (let d = 0; d < u; d++) s.bodyY > t.height + i.travel + 0.12 && (s.airborne = true), s.airborne ? (s.heaveVelocity -= 9.8 * p, s.bodyY += s.heaveVelocity * p, s.bodyY <= t.height && (s.bodyY = t.height, s.heaveVelocity = Math.max(0, -s.heaveVelocity * 0.06), s.airborne = false)) : (s.heaveVelocity += ((t.height - s.bodyY) * 110 - s.heaveVelocity * 17) * p, s.bodyY += s.heaveVelocity * p, s.bodyY = Math.max(t.height - i.travel * 0.35, s.bodyY)), s.pitchVelocity += ((c - s.pitch) * 95 - s.pitchVelocity * 16) * p, s.pitch += s.pitchVelocity * p, s.rollVelocity += ((l - s.roll) * 95 - s.rollVelocity * 16) * p, s.roll += s.rollVelocity * p;
-      return { ...s, contacts: s.airborne ? 0 : t.wheels.length, ground: t };
+    function ef(n,t,e,i,{acceleration:o=0,turnRate:r=0}={}){
+      return stepWeightedSuspension(n,t,e,i,{pitch:tf(t.pitch-o*3e-3,-.65,.65),roll:tf(t.roll+(n.speed??0)*r*(i.track?-25e-4:-.013),-.6,.6)});
     }
     function w1(n, { capacity: t = 4096, lifetime: e = 20, heightAt: i = Go, surfaceAt: o = Ai } = {}) {
       const r = new Float32Array(t * 12), s = new Float32Array(t * 4), c = new Float32Array(t * 4), a = [];
@@ -14066,8 +14065,8 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
       let d = n.vx ?? u.x * n.speed, f = n.vz ?? u.z * n.speed, m = d * u.x + f * u.z, x = d * p.x + f * p.z;
       const g = Math.max(0, -Math.sin(l.pitch) * Math.sign(s || m)), h = !!t.handbrake, _ = h && Math.hypot(d, f) > 8 && !n.airborne, M = !!t.brake || s * m < 0, v = Fr(n.traction ?? 1, _ ? 0.05 : 1, e * (_ ? 7 : 1.8)), S = { front: go, rear: go * v }, E = A1(r, { throttle: M ? 0 : s, handbrake: h, frontGrip: S.front, rearGrip: S.rear }), T = T1(r, { service: M, handbrake: h, sliding: _ }), C = s > 0 ? r.maxSpeed / (1 + g * 1.4) : s < 0 ? -r.maxSpeed * 0.4 / (1 + g * 1.4) : 0, y = s < 0 && Math.abs(m) < 5 && !n.airborne, b = y && (Math.abs(l.pitch) > 0.025 || Zl(n, r, a, o.waterSurfaceAt ?? Ai) > r.maxWadeDepth), A = Math.abs(E.front + E.rear) * (b ? 1.3 : 1) * water.driveScale, w = T.front + T.rear;
       !n.airborne && !M && A && (m = Fr(m, water.immersion>.01 ? C*(1-water.immersion)+yi(C,-water.reverseSpeed,water.maxSpeed)*water.immersion : C, e * A)), !n.airborne && w ? m = Fr(m, 0, e * w) : s || n.airborne || (m = Fr(m, 0, e * 5)), !M && !h && !n.airborne && (m += 9.8 * Math.sin(l.pitch) * e);
-      m*=Math.exp(-water.drag*e);x*=Math.exp(-water.drag*e);
-      const R = Math.abs(m), D = nf * Math.min(r.turnRate * go / (1 + R * R / 900), 12.5 * go / Math.max(1, R)), z = c * D * (_ ? 1.85 : 1) * Math.min(1, R / 4) * Math.sign(m), N = Fr(n.yawRate ?? 0, z, e * (_ ? 3.5 : 5.5 * nf)), V = n.heading + N * e;
+      m*=Math.exp(-(water.drag+(n.airborne?vehicleWeight(n.kind).airDrag:0))*e);x*=Math.exp(-water.drag*e);
+      const R = Math.abs(m), D = nf * Math.min(r.turnRate * go / (1 + R * R / 900), 12.5 * go / Math.max(1, R)), z = c * D * (n.airborne?.18:1) * (_ ? 1.85 : 1) * Math.min(1, R / 4) * Math.sign(m), N = Fr(n.yawRate ?? 0, z, e * (_ ? 3.5 : 5.5 * nf)), V = n.heading + N * e;
       d = u.x * m + p.x * x, f = u.z * m + p.z * x;
       const O = { x: Math.sin(V), z: Math.cos(V) }, q = { x: Math.cos(V), z: -Math.sin(V) };
       let K = d * O.x + f * O.z, rt = d * q.x + f * q.z;

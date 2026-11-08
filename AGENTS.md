@@ -49,3 +49,9 @@
 - `src/vehicle-water.js` supplies shallow-bed contact/deep-water buoyancy and immersion-dependent drag/drive/speed limits. The current P1 uses this support in Ga/Gl/suspension/jump. Keep raw height and altitude-aware water callbacks separate; null water must not become a sea-level surface in tunnels.
 - Do not restore the removed C1/maxWadeDepth movement gate or waterAllowedAt rejection for ground vehicles. Airborne vehicles above the water have zero water drag; submerged vehicles can drive/steer/reverse and climb out. Dry roads and bridges retain their original support and speed. Existing structure/tree/world-boundary collision stays active.
 - `scripts/qa/check-vehicle-water.py` covers all four chassis jumping synthetic/actual streams, deep-water forward/reverse, both bank exits and actual player W/S recovery. `tests/vehicle-water.test.js` covers support/immersion and untouched airborne arcs.
+
+## Weighted landing and suspension (2026-11-08)
+
+- `src/vehicle-suspension.js` owns per-kind weight/impulse/frequency/damping. Current ef supplies attitude targets only. Grounded recovery is strongly damped and cannot rebound above tyre support. Airborne attitude keeps inertia instead of chasing the ground, and vertical gravity belongs only to vehicle-jump.js.
+- `src/vehicle-jump.js` compresses on landing, clears stale ground momentum/angular kick, and uses a0.35s settling period. Settling prevents spring re-launch but must never suppress falling off a real drop. Preserve water support and stream crossing.
+- `tests/vehicle-weight.test.js` checks landing, settling, mass response and real support loss. `check-vehicle-water.py` now checks all four actual chassis plus real R-key landing and prior water recovery in one browser session.
