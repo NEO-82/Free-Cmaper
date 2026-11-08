@@ -34,3 +34,12 @@
 - The 4096² tunnel mask uses visitedTunnelPixels to compute the globally maximal Nl ceiling once per pixel; preserve full grid resolution and all seals/floors. Selected season coloring happens once through Hf.
 - `src/terrain-vehicle-camera.js` sets ground vehicle camera heading/grade from road and rendered terrain, not chassis oscillations. Ground delay1s, helicopter7s, no return at rest. First-person ground view uses world direction while seat location still follows the vehicle.
 - `scripts/qa/direct_launch.py` replaces the old two-screen start flow for live QA. Use polling=100 for async readiness if test RAF is disabled. `check-launch-and-camera.py` covers the new flow and camera; `check-current-offline.py` checks standalone/offline startup.
+
+## Ground jumps, cabin fit and airplane/parachute (2026-11-08)
+
+- `src/vehicle-jump.js` composes ballistic vertical support with current P1/ef suspension. R jumps, Space keeps the handbrake. Preserve edge-triggering, 120Hz substeps, landing/ceiling contact and aggregated R1 launch/landing/impact flags.
+- `src/rider-mount.js` fits the visible posed human (including skinning/hat/hair) inside per-vehicle cabin envelopes. Do not return to a single fixed unscaled rider offset. Restore root scale1 on normal exit and bailout.
+- `src/light-airplane.js`: lightweight model and standalone flight physics; bridge runway spawn, W/S throttle, A/D turn, mouse down pitches up/up pitches down, right-button drag orbits. Render pitch with the opposite sign. Grounded stop+F exits; airborne F bails out.
+- `src/parachute.js`: velocity-preserving bailout, next F deploys, progressive inflation/drag, WASD canopy steering and terrain/water touchdown. While ejection exists, skip normal walking physics/pose; restore walking/swimming and hide the canopy at touchdown.
+- Main entry wires the model/inputs/cameras/HUD/audio/random paint. Existing helicopter mouse-button controls and seven-second return remain unchanged. The new airplane uses the one-second aircraft-camera return.
+- `scripts/qa/check-airplane-jump.py` exercises real controls, four ground chassis, both characters in all six vehicles, runway takeoff, bailout/parachute/landing and render output. `check-current-offline.py airplane` verifies the actual standalone release; no argument defaults to helicopter.

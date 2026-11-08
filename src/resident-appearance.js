@@ -1,5 +1,5 @@
 export const VEHICLE_PALETTE=['#dc8279','#79acd0','#81b59a','#e7bd65','#ad94c8','#e5ded0','#bb6266','#657f9d','#8b9d6b','#d99b64','#70b5b8','#c78baa'];
-const paintBases={sedan:['e6bd73'],suv:['8eaf99'],scooter:['d9907f'],motorhome:['eee7d5','74988d'],helicopter:['f4bc57','e2ad52','e4ae54','f3d18a']};
+const paintBases={airplane:['f4bc57'],sedan:['e6bd73'],suv:['8eaf99'],scooter:['d9907f'],motorhome:['eee7d5','74988d'],helicopter:['f4bc57','e2ad52','e4ae54','f3d18a']};
 export function randomizeVehiclePaint(vehicle,kind=vehicle.state?.kind,random=Math.random){
  const color=VEHICLE_PALETTE[Math.floor(random()*VEHICLE_PALETTE.length)%VEHICLE_PALETTE.length],seen=new Set();
  vehicle.root.traverse(o=>{for(const material of Array.isArray(o.material)?o.material:[o.material]){if(!material?.color||seen.has(material))continue;seen.add(material);const hex=material.userData.vehiclePaintBase??material.color.getHexString();if(!(paintBases[kind]??[]).includes(hex))continue;material.userData.vehiclePaintBase=hex;material.color.set(color);if(['74988d','e2ad52'].includes(hex))material.color.offsetHSL(0,-.04,-.08);}});

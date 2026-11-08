@@ -1,3 +1,26 @@
+# 차량 점프·탑승 자세·경비행기와 낙하산 (2026-11-08)
+
+- 승용차·SUV·캠핑카·스쿠터에 R키 점프, 경사로 도약, 중력 낙하와 착지를 추가했습니다. Space 사이드브레이크는 유지합니다. 공중에서 연속 점프할 수 없습니다.
+- 남녀 캐릭터의 머리·모자·팔다리 크기를 계산하여 각 좌석/조종석 안에 맞추고 차체와 함께 움직이도록 했습니다. 하차/탈출하면 원래 크기로 돌아옵니다.
+- 타이틀 이동수단에 경비행기를 추가했습니다. 시작 다리 서쪽에 섬 방향으로 배치하여500m 다리를 활주로로 이용합니다.
+- 경비행기: W/S 출력 증가·감소, A/D 좌우 조작, 마우스 아래로 당기면 상승/위로 밀면 하강. 오른쪽 마우스 드래그로 주위를 볼 수 있습니다. Space는 지상 제동/공중 수평 복귀입니다.
+- 비행 중F로 탈출하고, 다시F를 누르면 낙하산이 펼쳐집니다. 전개 후 WASD로 조종하고 땅이나 물에 도착하면 낙하산이 접히며 보행/수영으로 이어집니다.
+- 자동 검사163개, 실제 게임의4종 점프·남녀6종 좌석 적합·다리 이륙·조작·탈출·낙하산·착지와 오프라인 경비행기 시작을 확인했습니다.
+
+최신 실행 ZIP: https://github.com/NEO-82/Free-Cmaper/raw/main/downloads/Free-Camper-Test.zip
+
+- 활성 진입점은 src/current-game.js입니다. 이전 src/main.js로 되돌리지 마세요. 제목 직접 선택/빠른 초기화/도로 카메라/헬기/음악10곡/주민AI/호수·폭포/확장맵을 유지합니다.
+- src/vehicle-jump.js는 차량 수직 탄도 상태를 담당합니다. 실제 P1에서 ef의 pitch/roll 서스펜션과 조합하며, 점프 시 중력9.81m/s², kind별 impulse6~7.4m/s, 접지/천장/착지. R1이 서브스텝의 launched/landed/impact를 집계합니다. 공중에서는 구동/브레이크로 수평 운동을 강제로 정지시키지 않습니다.
+- src/light-airplane.js는 독립 경비행기 모델과 물리, AIRPLANE_CONFIG, planeSpawn입니다. 기수 pitch는 양수 상승이며 렌더 X회전은 -pitch입니다. 이륙 속도26m/s, stall20m/s, 최고90m/s, 천장1800m. 실제 bridge startX+35m/z 중앙/headingπ/2, 캐릭터는 뒤4.7m. 지상 정지시F하차, 비행중F탈출. 무인 기체도 감속/활공/착지를 계속합니다.
+- Mu는 비행기 탑승시 마우스Y를 planePitchCommand로 누적합니다. 오른쪽 버튼을 누르면 비행 명령 대신 기존 둘러보기입니다. 기존 헬기 마우스 좌/우 버튼 상승/하강은 유지합니다. 비행기 시점은 기체 기준이며 기존 헬기7초/일반차량1초 규칙을 유지(비행기는1초)합니다.
+- src/rider-mount.js는 보이는 메시의 실제 posed bounds(스킨/헤어/모자 포함)로 각 cabin envelope 안에 맞춥니다. 백팩/숨긴 대체 외형은 제외합니다. 스쿠터는0.82배/실제 안장 높이, 닫힌 실내는 크기/위치를 계산합니다. 탑승 중 모든 프레임 root를 기체 quaternion/offset에 맞춥니다. bu/bailOut에서는 restoreRider로1배 복원합니다.
+- src/parachute.js는 ejectFromAirplane/stepParachute/모델입니다. ejection은 개인 물리와 분리하고 기존 _1/보행 포즈 갱신을 건너뜁니다. 첫F는 탈출만, 두번째F는 open=true(반복 입력 방지). 자유낙하 속도를 상속하고 1.1초에 걸쳐 canopy inflation, 완전 전개 후 하강 약5.2m/s/횡조종10m/s입니다. 착지하면 ejection=null/모델 숨김/ae=Ps/1배 복원합니다.
+- tests/airplane-jump.test.js 신규5개 포함 npm test163/163, 변경 후 신규5개와 build/build:offline 재확인. scripts/qa/check-airplane-jump.py에서 실제12개 남녀/6종 cabin 검사, ground4종 최고4.31~5.26m/착지1회, 다리 내 이륙·WASD·마우스 상하·F탈출/F낙하산·착지/복원까지 오류0. /tmp/camper-airplane-flight.png와 camper-parachute.png 렌더 확인.
+- scripts/qa/check-current-offline.py airplane: 네트워크 차단 최신HTML 경비행기 시작, HTTP요청0/오류0/개발 훅 제거. 스크립트 기본 인자는 helicopter이며 다른6종도 인자로 선택할 수 있습니다.
+- 소스·모듈·테스트·실행ZIP을 함께 GitHub main에 저장하고 고정 SHA 다운로드를 제공합니다. 웹 배포는 하지 않습니다.
+
+아래는 이전 기록입니다. 위 최신 안내를 우선합니다.
+
 # 최신 수정 — 타이틀에서 바로 준비·경사 기준 차량 시점·로딩 개선 (2026-11-08)
 
 - 새 노을 타이틀에서 캐릭터, 계절, 시작 날씨, 이동수단을 바로 고르고 게임을 시작합니다. 별도3D 선택 화면을 거치지 않습니다. 설정 메뉴도 처음부터 사용할 수 있습니다.
