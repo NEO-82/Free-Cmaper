@@ -61,3 +61,10 @@
 - `src/stream-clearance.js` carves the FINAL rendered terrain after Jd/road/campsite grading. Keep the triangle footprint and downhill elevation allowance: carving only analytical terrain lets mesh interpolation obstruct the stream. This operation only lowers terrain; preserve watershed points/lakes/waterfall and sea outlet.
 - `tunnelExcavationCeiling` deliberately exceeds the visible 17m inner arch to cover mask texel quantization, staying within the 20m rock backing. Preserve floor2.48 threshold and finite portal planes. Nature spawning uses a30m tunnel exclusion including canopy/rock footprint and portal ground mismatches.
 - `scripts/qa/check-corridor-clearance.py` checks the actual water mesh, coast outlet, every tunnel's interior mask and all prop colliders. Also run `check-tunnel-portals.py` for all20 portal floors and rendering.
+
+## Road edges and terrain (2026-11-11)
+
+- Current qd must grade against the NEAREST projected segment. Do not take the minimum of all segment heights within the wide underlay radius: that excavates 2–3m trenches next to ascending summit roads.
+- `src/road-edge-blend.js` builds a continuous6m smooth verge with4 lateral samples, matching the exact road tangent and overlapping both road/terrain edges. Keep the name `road edge blend`: jd includes these triangles in walking/vehicle support, and camp masking includes them. Never omit a connection merely because the ground differs by0.6m. Preserve tunnel, bridge and water exclusions, checking quad corners as well as centres.
+- `scripts/qa/check-road-edges.py` audits all13 roads/both sides, exact inner/outer seams, missing faces and actual walking support, then renders the two summit roads/coast/bridge approach. Existing corridor/portal QA protects tunnels, lake/waterfall and sea outlet.
+- `bridgeBedHeight` supplies hidden, narrow approach support within16.15m of the starting bridge's ends so grid interpolation does not drag the land approach down to-5m. Keep the broad bridge CPU/GPU footprint clipping unchanged; the middle of the span and wide apron remain-5m.

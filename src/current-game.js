@@ -1,4 +1,5 @@
 import {createStreamClearance} from './stream-clearance.js';
+import {buildRoadEdgeBlend,bridgeBedHeight} from './road-edge-blend.js';
 import {stepWeightedSuspension,vehicleWeight} from './vehicle-suspension.js';
 import {vehicleWaterSupport,vehicleWaterState} from './vehicle-water.js';
 import {stepVehicleJump} from './vehicle-jump.js';
@@ -13484,16 +13485,18 @@ void main() {
       return i.tunnel && i.distance < 17 && e < i.height + 11 ? i.height + 5.8 + 4.8 * Math.sqrt(Math.max(0, 1 - (i.distance / 17) ** 2)) : 1 / 0;
     }
     function qd(n, t, e) {
-      let i = null, o = 1 / 0;
+      // Grade against the nearest projected road height. Taking the minimum
+      // over neighbouring segments digs a trench beside every ascending road.
+      let i = null;
       for (const r of Ir.get(`${Math.floor(n / Ti)}:${Math.floor(t / Ti)}`) ?? []) {
         const { a: s, b: c } = r, a = c.x - s.x, l = c.z - s.z, u = yi(((n - s.x) * a + (t - s.z) * l) / (a * a + l * l || 1), 0, 1), p = Math.hypot(n - s.x - u * a, t - s.z - u * l), d = s.y + u * (c.y - s.y), f = r.road.width / 2;
-        p > f + 36 || r.tunnel && e > d + 16 || (p <= f + 16 && (o = Math.min(o, d - 0.08)), (!i || p - f < i.distance - i.half) && (i = { distance: p, y: d, half: f }));
+        if (p > f + 36 || r.tunnel && e > d + 16) continue;
+        if (!i || p - f < i.distance - i.half) i = { distance: p, y: d, half: f };
       }
       if (i) {
         const { distance: r, y: s, half: c } = i, a = 1 - Re(c + 16, c + 36, r);
         e += (s - 0.08 - e) * a;
       }
-      e = Math.min(e, o);
       for (const r of Oa) Math.abs(n - r.x) < 52 && Math.abs(t - r.z) < 52 && zd(r.underlay.points, n, t) && (e = Math.min(e, r.y - 0.08));
       return e;
     }
@@ -13860,7 +13863,7 @@ void main() {
       return Ar(n, t, Wl(n, t));
     }
     function Jd(n, t) {
-      return n >= Rt.startX && n <= Rt.endX && Math.abs(t - Rt.z) <= 80 ? -5 : Ar(n, t, qd(n, t, Rs(n, t)));
+      return n >= Rt.startX && n <= Rt.endX && Math.abs(t - Rt.z) <= 80 ? bridgeBedHeight(Rt,n,t,Md) : Ar(n, t, qd(n, t, Rs(n, t)));
     }
     function g1(n) {
       const t = new Qt();
@@ -15190,20 +15193,12 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
         for (const ut of Z) $i(i, ut, -0.22, -0.08, u, 0.04), $i(i, ut, 0.08, 0.22, u, 0.04), $i(i, ut, -8.6, -8.43, p, 0.04), $i(i, ut, 8.43, 8.6, p, 0.04);
       }
       for (const k of Nn) for (const Z of [-1, 1]) {
-        const et = [], ut = [];
-        let st = false;
-        k.track.forEach((U, Nt) => {
-          const zt = k.track[Math.max(0, Nt - 1)], bt = k.track[Math.min(k.track.length - 1, Nt + 1)], Pt = bt.x - zt.x, le = bt.z - zt.z, tt = Math.hypot(Pt, le) || 1, pt = Z * k.width / 2, Ot = Z * (k.width / 2 + 2), Gt = U.x + le / tt * Ot, F = U.z - Pt / tt * Ot, P = e(Gt, F), W = U.x >= Rt.startX && U.x <= Rt.endX && Math.abs(U.z - Rt.z) < Rt.width / 2, J = !U.tunnel && !W && Math.abs(P - U.y) < 0.6;
-          if (et.push(U.x + le / tt * pt, U.y, U.z - Pt / tt * pt, Gt, P, F), Nt && J && st) {
-            const it = Nt * 2;
-            ut.push(it - 2, it, it - 1, it - 1, it, it + 1);
-          }
-          st = J;
-        });
+        const {positions:et,indices:ut,columns}=buildRoadEdgeBlend(k,Z,{heightAt:e,excludedAt:(x,z)=>
+          x>Rt.startX&&x<Rt.endX&&Math.abs(z-Rt.z)<80 || Ei.waterAt(x,z)!==null || No(x,z)<1});
         const vt = new me();
         vt.setAttribute("position", new Vt(et, 3)), vt.setIndex(ut), vt.computeVertexNormals();
         const Yt = new Jt(vt, l);
-        Yt.name = "road edge blend", Yt.receiveShadow = true, i.add(Yt);
+        Yt.name = "road edge blend", Yt.userData.roadId=k.id,Yt.userData.side=Z,Yt.userData.columns=columns,Yt.receiveShadow = true, i.add(Yt);
       }
       const m = a.clone();
       m.polygonOffsetFactor = -3, m.polygonOffsetUnits = -3;
