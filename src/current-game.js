@@ -1,3 +1,4 @@
+import {roundedDunes,alpineHeight,alpineSnow,createAlpineWaters} from './alpine-waters.js';
 import {createStreamClearance} from './stream-clearance.js';
 import {buildRoadEdgeBlend,bridgeBedHeight} from './road-edge-blend.js';
 import {stepWeightedSuspension,vehicleWeight} from './vehicle-suspension.js';
@@ -13166,9 +13167,11 @@ void main() {
       return fo(n, t) > 0 && El(n, t) < Tl && Al(n, t);
     }
     function Dd(n, t) {
-      const e = Math.sin(n * 0.014 + Math.sin(t * 8e-3) * 2.4 + t * 7e-3) * 0.5 + 0.5, i = Math.max(0.65, 0.8 + 6 * e ** 2 + 1.2 * (0.5 + 0.5 * Math.sin(t * 0.023 - n * 6e-3)) ** 3), o = Math.max(0, fo(n, t)), r = 0.65 + Math.min(o, 100) * 0.025;
-      return r + (i - r) * Re(100, 240, o);
+      const inland = Math.max(0, fo(n,t));
+      const shore = .65 + Math.min(inland,100)*.025;
+      return shore + (roundedDunes(n,t)-shore)*Re(100,240,inland);
     }
+
     function Rl(n, t) {
       let e = Sl(n, t);
       for (let a = 0; a < hi.length; a++) {
@@ -13185,7 +13188,7 @@ void main() {
         const l = Math.hypot(n - a.x, t - a.z), u = 1 - Re(a.radius, a.radius + 12, l);
         e = e * (1 - u) + a.height * u;
       }
-      return e;
+      return alpineHeight(n,t,hi.find(m=>m.id==="cloud"),e);
     }
     function Id(n, t) {
       const e = wl(n, t);
@@ -13193,7 +13196,7 @@ void main() {
       const i = di(n, t);
       if (i <= 0) return -0.15 - Math.min(8, -i * 0.06);
       let o = Math.max(0.65, 2.5 + Math.sin(n * 0.026) * Math.cos(t * 0.021) * 2.2 + Math.sin(n * 0.012 + t * 0.041) * 1.15);
-      fo(n, t) > 0 && (o = Math.max(o, 2.5 + (Rl(n, t) - 2.5) * Math.max(Re(90, 300, i), ...hi.map((c) => 1 - Re(c.radius, c.radius + 20, Math.hypot(n - c.x, t - c.z)))))), o = Math.max(o, Sl(n, t) * Re(0, 90, i));
+      fo(n, t) > 0 && (o = Math.max(o, 2.5 + (Rl(n, t) - 2.5) * Math.max(Re(90, 300, i), ...hi.map((c) => 1 - Re(c.id==="cloud"?Math.min(c.rx,c.rz)*.45:c.radius, c.id==="cloud"?Math.min(c.rx,c.rz)*.8:c.radius+20, Math.hypot(n - c.x, t - c.z)))))), o = Math.max(o, Sl(n, t) * Re(0, 90, i));
       const r = Cl(n, t);
       o = o * (1 - r) + Dd(n, t) * r, o = o * Re(0, 35, i) - 0.15 * (1 - Re(0, 35, i));
       const s = Math.hypot((n - an.x) / an.radiusX, (t - an.z) / an.radiusZ);
@@ -13204,8 +13207,10 @@ void main() {
       return wd(n, t, o);
     }
     const Ei = Nv(Sn, Id), Oo = Ei.lowerLake;
+    let additionalWaters = null;
     function Ts(n, t) {
-      return Ei.terrain(n, t, Id(n, t));
+      const height = Ei.terrain(n, t, Id(n, t));
+      return additionalWaters ? additionalWaters.terrain(n,t,height) : height;
     }
     function As(n, t) {
       let e = 0;
@@ -13519,14 +13524,17 @@ void main() {
       }
       return Object.freeze({ ...n, x: t, z: e });
     })), Dr = fi[0];
+    additionalWaters = createAlpineWaters({mountains:hi,heightAt:Id,gridStep:Md,
+      blocked:(x,z)=>fo(x,z)<100||cn(x,z).distance<85||No(x,z)<2||Ei.waterAt(x,z)!==null||
+        wi.some(v=>Math.hypot(x-v.x,z-v.z)<v.radius+65)||fi.some(v=>Math.hypot(x-v.x,z-v.z)<75)});
     function Ai(n, t) {
       if (!An(n, t)) return null;
       if (No(n, t) < 1) return Sn.level;
-      const e = Ei.waterAt(n, t);
+      const e = additionalWaters.waterAt(n,t) ?? Ei.waterAt(n, t);
       return e !== null ? e : Math.hypot((n - an.x) / an.radiusX, (t - an.z) / an.radiusZ) < 1 ? 0.1 : t >= Pr && Math.abs(n - La(t)) < 5.5 ? 0.12 : 0;
     }
     function An(n, t) {
-      const e = cn(n, t), i = Ei.waterAt(n, t);
+      const e = cn(n, t), i = additionalWaters.waterAt(n,t) ?? Ei.waterAt(n, t);
       return e.distance < (e.road?.width ?? 22) / 2 && !(e.tunnel && i !== null && i > e.height + 12) || wl(n, t) !== null ? false : di(n, t) <= 0 ? true : i !== null || No(n, t) < 1 || ((n - an.x) / an.radiusX) ** 2 + ((t - an.z) / an.radiusZ) ** 2 < 1 || t >= Pr && Math.abs(n - La(t)) < 5.5;
     }
     function $d(n, t, e) {
@@ -13623,7 +13631,7 @@ void main() {
       }
       return { x: r, z: s };
     }
-    const Qv = Object.freeze(Object.defineProperty({ __proto__: null, ARRIVAL: sn, BRIDGE: Rt, COAST_START: Ed, ISLAND_OUTLINE: Cr, JUNCTION_PATCHES: Oa, LAKE: an, LOWER_LAKE: Oo, MAINLAND: Es, MAP_SCALE: Fe, MOUNTAINS: hi, MOUNTAIN_PEAKS: Sd, MOUNTAIN_WATERS: Ei, PAVEMENT_WIDTH: Nd, RIVER_START: Pr, ROADS: Nn, ROAD_JUNCTIONS: Fl, ROAD_NETWORK: Ul, ROAD_WIDTH: Fd, SCENERY: mn, get SHOP() {
+    const Qv = Object.freeze(Object.defineProperty({ __proto__: null, ARRIVAL: sn, BRIDGE: Rt, COAST_START: Ed, ISLAND_OUTLINE: Cr, JUNCTION_PATCHES: Oa, LAKE: an, LOWER_LAKE: Oo, MAINLAND: Es, MAP_SCALE: Fe, MOUNTAINS: hi, MOUNTAIN_PEAKS: Sd, MOUNTAIN_WATERS: Ei, ADDITIONAL_WATERS: additionalWaters, PAVEMENT_WIDTH: Nd, RIVER_START: Pr, ROADS: Nn, ROAD_JUNCTIONS: Fl, ROAD_NETWORK: Ul, ROAD_WIDTH: Fd, SCENERY: mn, get SHOP() {
       return Dr;
     }, get SHOP_SITES() {
       return fi;
@@ -14221,6 +14229,12 @@ diffuseColor.a*=vSkidStrength*(1.-smoothstep(${(e * 0.75).toFixed(1)},${e.toFixe
             const z = _(R.x, R.z);
             D ? h.lineTo(z.x, z.y) : h.moveTo(z.x, z.y);
           }), h.stroke(), h.strokeStyle = "#f8e5b4", h.lineWidth = e ? 4 : 1.5;
+          for (const water of additionalWaters.waters) {
+            h.strokeStyle="#64bdcb";h.lineWidth=e?3:1.5;h.beginPath();
+            water.points.forEach((point,index)=>{const p=_(point.x,point.z);index?h.lineTo(p.x,p.y):h.moveTo(p.x,p.y);});h.stroke();
+            for(const pool of [water.sourceLake,water.lowerLake]){const p=_(pool.x,pool.z);h.fillStyle="#64bdcb";h.beginPath();h.ellipse(p.x,p.y,Math.max(1.5,pool.radiusX/(dt.maxX-dt.minX)*i),Math.max(1.5,pool.radiusZ/(dt.maxZ-dt.minZ)*o),0,0,Math.PI*2);h.fill();}
+            if(e)M(water.waterfall.top.x,water.waterfall.top.z,m("waterfall"),"#5098a8",12,-12);
+          }
           for (let R = 0; R < Ul.length; R++) {
             const D = Nn[R].kind === "village";
             h.strokeStyle = D ? "#bc9463" : "#f8e5b4", h.lineWidth = D ? e ? 2 : 1 : e ? 4 : 1.5, h.beginPath();
@@ -15458,7 +15472,8 @@ vec4 portal=texture2D(portalMask,(vTunnelWorld.xz-portalBounds.xy)/portalBounds.
       const _ = h(Pe.minX, Pe.maxX), M = h(Pe.minZ, Pe.maxZ), v = new $n(l, u, _.length - 1, M.length - 1);
       v.rotateX(-Math.PI / 2);
       const S = v.attributes.position, E = v.attributes.uv, T = new Float32Array(S.count * 3);
-      const clearStream = createStreamClearance(Ei.points, Md);
+      const clearOriginalStream = createStreamClearance(Ei.points, Md);
+      const clearStream = (x,z,h)=>additionalWaters.terrain(x,z,clearOriginalStream(x,z,h));
       for (let I = 0; I < S.count; I++) {
         const G = _[I % _.length], H = M[Math.floor(I / _.length)];
         S.setXYZ(I, G, clearStream(G, H, Jd(G, H)), H), E.setXY(I, (G - Pe.minX) / l, (Pe.maxZ - H) / u);
@@ -15489,6 +15504,13 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
         return { x: f_(H), y: 0.12, z: H };
       }), 11, V, e), Xt = Sn, ct = Cn(e, new Po(1, 128), V, Xt.x, Xt.level, Xt.z);
       ct.rotation.x = -Math.PI / 2, ct.scale.set(Xt.radiusX, Xt.radiusZ, 1), ct.castShadow = false, ct.name = "summit-lake-water";
+      const tributaryViews = additionalWaters.waters.map(w=>{
+        const source=Cn(e,new Po(1,48),V,w.sourceLake.x,w.sourceLake.level,w.sourceLake.z);
+        source.rotation.x=-Math.PI/2;source.scale.set(w.sourceLake.radiusX,w.sourceLake.radiusZ,1);
+        source.name=w.id+'-spring';
+        const view=o_(e,w,V);view.root.name=w.id;
+        view.root.traverse(object=>{if(object!==view.root&&object.name)object.name=w.id+"-"+object.name;});return view;
+      });
       const _t = o_(e, Ei, V), k = V1(e), Z = new se({ color: "#a3c99b", roughness: 1 });
       for (const I of Ql) {
         const G = Cn(e, new Po(I.radius, 96), Z, I.x, I.height, I.z);
@@ -15675,7 +15697,7 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
           const $ = S.getX(H), ht = S.getY(H), Et = S.getZ(H), Dt = Math.sin($ * 0.037 + Math.cos(Et * 0.05)) * Math.sin(Et * 0.031) * 0.035, oe = Jl($, Et) < 45;
           mc.set(I === 3 ? ht > 10 ? "#e9f2ec" : "#cfdfd2" : ["#a3c99b", "#86bd93", "#ccb689", "#dce9e1"][I]), gc.set(I === 3 ? "#c0c6bc" : "#989b94");
           const te = 1 - Math.max(0, G.getY(H)), Le = As($, Et);
-          Ui.copy(mc).lerp(gc, Math.max(zn.smoothstep(te, 0.1, 0.34), Le)), oe && Ui.set("#f1d5a0"), No($, Et) > 1 && No($, Et) < 1.15 && Ui.lerp(new Kt("#c3bea2"), 0.7), mo($, Et) && Ui.lerp(new Kt("#e6bf78"), Cl($, Et)), Ui.offsetHSL(0, 0, Dt), T[H * 3] = Ui.r, T[H * 3 + 1] = Ui.g, T[H * 3 + 2] = Ui.b;
+          Ui.copy(mc).lerp(gc, Math.max(zn.smoothstep(te, 0.1, 0.34), Le)), oe && Ui.set("#f1d5a0"), No($, Et) > 1 && No($, Et) < 1.15 && Ui.lerp(new Kt("#c3bea2"), 0.7), mo($, Et) && Ui.lerp(new Kt("#e6bf78"), Cl($, Et)), Ui.lerp(new Kt("#edf3f7"),alpineSnow($,Et,ht,hi.find(m=>m.id==="cloud"))*Re(.25,.7,G.getY(H))), Ui.offsetHSL(0, 0, Dt), T[H * 3] = Ui.r, T[H * 3 + 1] = Ui.g, T[H * 3 + 2] = Ui.b;
         }
         v.attributes.color.needsUpdate = true, Ut.color.set(I === 3 ? "#a6b8ab" : I === 2 ? "#99794d" : "#64a549"), y.forEach((H, $) => H.color.set(I === 3 ? $ === 0 ? "#9bbda4" : "#b9d4b6" : I === 2 ? ["#a7b63d", "#e6a23a", "#e3bf4c"][$] : I === 0 ? ["#89b793", "#a3c799", "#c1d4a7"][$] : ["#36a338", "#64c62f", "#86d63c"][$])), ei.color.set(["#85d548", "#63c43d", "#c5ba54", "#d9e7d8"][I]), Gs.color.copy(ei.color), Kr.color.set(["#fff0b5", "#ffedaf", "#edbe7b", "#f4f6f1"][I]);
       }
@@ -15707,12 +15729,13 @@ float ripple = sin(vPaintedWater.x * .42 + sin(vPaintedWater.z * .13) * 1.8 + uL
       // The selected season is applied once by Hf before the world is displayed.
       function j(I, G, H = Ri) {
         qt(H), Ct(H), ut.update(H), D.value = G, k.update(G), _t.update(G, H);
+        tributaryViews.forEach(view=>view.update(G,H));
         for (let $ = a.length - 1; $ >= 0; $--) {
           const ht = a[$];
           ht.time += I, ht.object.rotation.z = Math.min(Math.PI * 0.48, ht.time * ht.time * 0.8) * ht.direction, ht.time > 3.2 && (e.remove(ht.object), a.splice($, 1));
         }
       }
-      return { group: e, mountainWaters: _t, summitWater: ct, terrain: v, groundMesh: C, walkingHeightAt: ot, renderedTerrainHeight: Y, setSunset(I) {
+      return { group: e, mountainWaters: _t, tributaryViews, summitWater: ct, terrain: v, groundMesh: C, walkingHeightAt: ot, renderedTerrainHeight: Y, setSunset(I) {
         z.value = I.sunset, N.value.copy(I.sunDirection);
       }, campGroundView: t, setCampGround: t.setPatch, shoreWaves: k, roadView: ut, platformsNear(I, G) {
         return r.filter((H) => !H.felled && Math.hypot(H.x - I, H.z - G) < 8).flatMap((H) => H.platforms);

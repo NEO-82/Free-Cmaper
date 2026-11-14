@@ -68,3 +68,9 @@
 - `src/road-edge-blend.js` builds a continuous6m smooth verge with4 lateral samples, matching the exact road tangent and overlapping both road/terrain edges. Keep the name `road edge blend`: jd includes these triangles in walking/vehicle support, and camp masking includes them. Never omit a connection merely because the ground differs by0.6m. Preserve tunnel, bridge and water exclusions, checking quad corners as well as centres.
 - `scripts/qa/check-road-edges.py` audits all13 roads/both sides, exact inner/outer seams, missing faces and actual walking support, then renders the two summit roads/coast/bridge approach. Existing corridor/portal QA protects tunnels, lake/waterfall and sea outlet.
 - `bridgeBedHeight` supplies hidden, narrow approach support within16.15m of the starting bridge's ends so grid interpolation does not drag the land approach down to-5m. Keep the broad bridge CPU/GPU footprint clipping unchanged; the middle of the span and wide apron remain-5m.
+
+## Alpine tributaries and dunes (2026-11-14)
+
+- `src/alpine-waters.js` owns seeded tributaries, low rounded dunes and the cloud mountain's broad alpine ridge/snowline. The active entry integrates them; keep water rendering, map, physics and final terrain clearance aligned.
+- Additional channels initialize after the road network. Keep whole reaches away from roads, villages and shops. Preserve graded terrain outside the actual channel footprint; a no-op clearance must never clamp road terrain to natural height. Repeated clearance must be idempotent.
+- `scripts/qa/check-alpine-waters.py` validates all four actual streams, water physics, terrain clearance and road distance, then saves alpine/desert/stream canvas views to `/tmp/camper-landscape-*.png`. Run existing road-edge/corridor checks and offline startup too.
